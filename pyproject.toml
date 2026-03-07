@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiblock"
+version = "0.2.9"
+description = "Python SDK for interacting with the AIBlock blockchain"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "AIBlock Team", email = "team@aiblock.dev" }
+]
+requires-python = ">=3.8"
+keywords = ["blockchain", "aiblock", "cryptocurrency"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Security :: Cryptography"
+]
+dependencies = [
+    "requests>=2.25.1",
+    "pynacl>=1.4.0",
+    "mnemonic>=0.20",
+    "typing-extensions>=4.0.0",
+    "base58>=2.1.1",
+    "python-dotenv>=1.0.0",
+    "bip32utils>=0.3.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/AIBlockOfficial/2Way.py"
+Documentation = "https://github.com/AIBlockOfficial/2Way.py/tree/main/docs"
+"Bug Tracker" = "https://github.com/AIBlockOfficial/2Way.py/issues"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["aiblock", "aiblock.utils"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"aiblock" = ["py.typed"]
+
+[tool.setuptools_scm]
+write_to = "aiblock/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v" 

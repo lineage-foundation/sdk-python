@@ -1,0 +1,7 @@
+requests>=2.25.1
+pynacl>=1.4.0
+mnemonic>=0.20
+typing-extensions>=4.0.0
+base58>=2.1.1
+python-dotenv>=1.0.0
+bip32utils>=0.3.0 
