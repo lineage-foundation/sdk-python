@@ -1,21 +1,21 @@
-# AIBlock SDK Examples
+# Lineage SDK Examples
 
-This document provides practical examples of using the AIBlock SDK for various blockchain operations.
+This document provides practical examples of using the Lineage SDK for various blockchain operations.
 
 ## Setup
 
 First, install the SDK and set up your environment:
 
 ```bash
-pip install aiblock
+pip install lineage
 ```
 
 Create a `.env` file:
 ```bash
-AIBLOCK_STORAGE_HOST=https://storage.aiblock.dev
-AIBLOCK_MEMPOOL_HOST=https://mempool.aiblock.dev
-AIBLOCK_VALENCE_HOST=https://valence.aiblock.dev
-AIBLOCK_PASSPHRASE=your-secure-passphrase
+LINEAGE_STORAGE_HOST=https://storage.aiblock.dev
+LINEAGE_MEMPOOL_HOST=https://mempool.aiblock.dev
+LINEAGE_VALENCE_HOST=https://valence.aiblock.dev
+LINEAGE_PASSPHRASE=your-secure-passphrase
 ```
 
 ## Basic Blockchain Queries
@@ -23,7 +23,7 @@ AIBLOCK_PASSPHRASE=your-secure-passphrase
 ### Getting Latest Block Information
 
 ```python
-from aiblock.blockchain import BlockchainClient
+from lineage.blockchain import BlockchainClient
 
 # Initialize client
 client = BlockchainClient(
@@ -156,7 +156,7 @@ transactions = fetch_multiple_transactions(client, tx_hashes)
 ### Creating and Initializing a Wallet
 
 ```python
-from aiblock.wallet import Wallet
+from lineage.wallet import Wallet
 
 def create_new_wallet():
     """Create a new wallet with a generated seed phrase"""
@@ -319,7 +319,7 @@ block_data = validate_and_query_block(client, 1)
 
 ```python
 import os
-from aiblock.config import get_config
+from lineage.config import get_config
 
 def setup_from_environment():
     """Setup client using environment variables"""
@@ -448,4 +448,4 @@ def secure_seed_input():
 seed = secure_seed_input()
 ```
 
-This documentation provides practical, working examples that align with the current AIBlock SDK implementation. 
+This documentation provides practical, working examples that align with the current Lineage SDK implementation. 

@@ -2,7 +2,7 @@ import pytest
 import sys
 import logging
 from pathlib import Path
-from aiblock.wallet import Wallet
+from lineage.wallet import Wallet
 from typing import Dict, Any
 import requests_mock
 import json
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Add the package root to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from aiblock import wallet
+from lineage import wallet
 
 @pytest.fixture
 def valid_config():

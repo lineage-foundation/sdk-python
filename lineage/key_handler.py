@@ -18,7 +18,7 @@ from nacl.secret import SecretBox
 from nacl.utils import random
 from nacl.exceptions import CryptoError
 
-from aiblock.interfaces import (
+from lineage.interfaces import (
     IErrorInternal,
     IKeypair,
     IMasterKey,
@@ -26,7 +26,7 @@ from aiblock.interfaces import (
     IKeypairEncrypted,
     IResult
 )
-from aiblock.utils.general_utils import (
+from lineage.utils.general_utils import (
     get_hex_string_bytes,
     get_hex_string_from_bytes,
     get_random_bytes,
@@ -37,7 +37,7 @@ from aiblock.utils.general_utils import (
     throw_if_err,
     truncate_by_bytes_utf8,
 )
-from aiblock.constants import ADDRESS_VERSION, ADDRESS_VERSION_OLD, TEMP_ADDRESS_VERSION
+from lineage.constants import ADDRESS_VERSION, ADDRESS_VERSION_OLD, TEMP_ADDRESS_VERSION
 
 logger = logging.getLogger(__name__)
 

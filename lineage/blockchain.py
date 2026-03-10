@@ -9,7 +9,7 @@ from enum import Enum
 import uuid
 import random
 from urllib.parse import urlparse
-from aiblock.interfaces import IResult, IErrorInternal
+from lineage.interfaces import IResult, IErrorInternal
 from importlib import metadata as _importlib_metadata
 import json
 
@@ -314,7 +314,7 @@ class BlockchainClient:
     def _get_version(self) -> str:
         """Get the SDK version from installed metadata, fallback to project version."""
         try:
-            return _importlib_metadata.version('aiblock')
+            return _importlib_metadata.version('lineage')
         except Exception:
             return "0.2.8"
     

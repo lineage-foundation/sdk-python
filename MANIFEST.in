@@ -2,10 +2,10 @@ include LICENSE
 include README.md
 include requirements.txt
 include requirements-test.txt
-include aiblock/py.typed
+include lineage/py.typed
 
-recursive-include aiblock *.py
-recursive-include aiblock/utils *.py
+recursive-include lineage *.py
+recursive-include lineage/utils *.py
 recursive-exclude * __pycache__
 recursive-exclude * *.py[cod]
 recursive-exclude tests * 

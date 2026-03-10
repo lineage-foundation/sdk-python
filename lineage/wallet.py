@@ -5,7 +5,8 @@ import nacl.signing
 import time
 import hashlib
 import os
-from typing import Dict, Any, List, Optional, Union, TypeVar, cast, TypedDict, NotRequired
+from typing import Dict, Any, List, Optional, Union, TypeVar, cast, TypedDict
+from typing_extensions import NotRequired
 from urllib.parse import urlparse
 import nacl.bindings
 from mnemonic import Mnemonic
@@ -14,13 +15,13 @@ import random
 import logging
 from dataclasses import dataclass, field
 
-from aiblock.interfaces import (
+from lineage.interfaces import (
     IErrorInternal, IResult, IMasterKey,
     IKeypair, IKeypairEncrypted, INetworkConfig,
     IClientConfig, INetworkRoute, ITransactionData,
     ITransaction, IBalanceResponse, INewWalletResponse, IMasterKeyEncrypted
 )
-from aiblock.key_handler import (
+from lineage.key_handler import (
     get_passphrase_buffer,
     generate_master_key,
     generate_seed_phrase,
@@ -30,17 +31,17 @@ from aiblock.key_handler import (
     decrypt_keypair,
     generate_keypair_from_seed,
 )
-from aiblock.validators import validate_metadata
-from aiblock.utils import (
+from lineage.validators import validate_metadata
+from lineage.utils import (
     cast_api_status,
 )
-from aiblock.utils.general_utils import (
+from lineage.utils.general_utils import (
     get_random_bytes,
     get_random_string
 )
-from aiblock.constants import ADDRESS_VERSION, ITEM_DEFAULT, SEED_REGEN_THRES, TEMP_ADDRESS_VERSION
-from aiblock.config import get_config, validate_env_config, validate_config
-from aiblock.blockchain import BlockchainClient, get_headers as client_get_headers, handle_response as client_handle_response
+from lineage.constants import ADDRESS_VERSION, ITEM_DEFAULT, SEED_REGEN_THRES, TEMP_ADDRESS_VERSION
+from lineage.config import get_config, validate_env_config, validate_config
+from lineage.blockchain import BlockchainClient, get_headers as client_get_headers, handle_response as client_handle_response
 
 # Set up logging
 logger = logging.getLogger(__name__)

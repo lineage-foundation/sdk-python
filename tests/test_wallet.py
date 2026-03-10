@@ -2,8 +2,8 @@ import pytest
 import sys
 import logging
 from pathlib import Path
-from aiblock.wallet import Wallet, ITEM_DEFAULT
-from aiblock.interfaces import IResult, IErrorInternal, IMasterKey
+from lineage.wallet import Wallet, ITEM_DEFAULT
+from lineage.interfaces import IResult, IErrorInternal, IMasterKey
 import hashlib
 import json
 from typing import Dict, Any
@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 # Add the package root to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from aiblock import wallet
-from aiblock.key_handler import generate_seed_phrase, validate_seed_phrase, generate_master_key
+from lineage import wallet
+from lineage.key_handler import generate_seed_phrase, validate_seed_phrase, generate_master_key
 
 def test_seed_phrase_generation():
     """Test that seed phrase generation works and produces valid phrases."""
@@ -147,7 +147,7 @@ def test_create_item_asset(wallet: Wallet, mock_api):
 
 def test_2way_payment_methods(wallet: Wallet, mock_api):
     """Test 2WayPayment methods: make, fetch, accept, reject."""
-    from aiblock.interfaces import IResult
+    from lineage.interfaces import IResult
     # Patch: Ensure passphrase_key is set for decryption
     wallet.passphrase_key = b"test_passphrase_key_32bytes_long!"
     # Patch: Ensure current_keypair is set and matches all_keypairs
@@ -390,7 +390,7 @@ def dummy_keypair():
     }
 
 def dummy_wallet():
-    from aiblock.wallet import Wallet
+    from lineage.wallet import Wallet
     wallet = Wallet()
     wallet.network_config = {
         "valenceHost": "http://mockvalence"

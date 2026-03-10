@@ -1,5 +1,5 @@
-from aiblock.config import get_config, validate_env_config
-from aiblock.wallet import Wallet
+from lineage.config import get_config, validate_env_config
+from lineage.wallet import Wallet
 
 def test_environment_config():
     """Test loading and validating environment configuration."""

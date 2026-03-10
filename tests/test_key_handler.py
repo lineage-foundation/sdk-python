@@ -4,7 +4,7 @@ import pytest
 import base64
 import hashlib
 import nacl.signing
-from aiblock.key_handler import (
+from lineage.key_handler import (
     get_address_version,
     generate_seed_phrase,
     validate_seed_phrase,
@@ -15,8 +15,8 @@ from aiblock.key_handler import (
     create_signature,
     truncate_string
 )
-from aiblock.interfaces import IErrorInternal, IResult, IMasterKey
-from aiblock.constants import ADDRESS_VERSION, ADDRESS_VERSION_OLD, TEMP_ADDRESS_VERSION
+from lineage.interfaces import IErrorInternal, IResult, IMasterKey
+from lineage.constants import ADDRESS_VERSION, ADDRESS_VERSION_OLD, TEMP_ADDRESS_VERSION
 
 def test_generate_seed_phrase():
     """Test seed phrase generation."""

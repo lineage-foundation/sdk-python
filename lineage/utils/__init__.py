@@ -1,4 +1,4 @@
-from aiblock.utils.general_utils import (
+from lineage.utils.general_utils import (
     cast_api_status,
     create_id_and_nonce_headers,
     throw_if_err,

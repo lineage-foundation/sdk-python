@@ -19,9 +19,9 @@ This guide covers common issues you might encounter when using the AIBlock SDK a
 1. Check if your environment variables are set correctly:
    ```env
    # .env file in your project directory
-   AIBLOCK_STORAGE_HOST=https://storage.aiblock.dev
-   AIBLOCK_MEMPOOL_HOST=https://mempool.aiblock.dev
-   AIBLOCK_VALENCE_HOST=https://valence.aiblock.dev
+   LINEAGE_STORAGE_HOST=https://storage.aiblock.dev
+   LINEAGE_MEMPOOL_HOST=https://mempool.aiblock.dev
+   LINEAGE_VALENCE_HOST=https://valence.aiblock.dev
    ```
 
 2. Verify network connectivity:
@@ -120,19 +120,19 @@ This guide covers common issues you might encounter when using the AIBlock SDK a
 
 #### Problem: SDK version compatibility issues
 ```python
-ImportError: Cannot import name 'X' from 'aiblock'
+ImportError: Cannot import name 'X' from 'lineage'
 ```
 
 **Solutions:**
 1. Check installed version:
    ```python
-   import aiblock
-   print(f"Installed version: {aiblock.__version__}")
+   import lineage
+   print(f"Installed version: {lineage.__version__}")
    ```
 
 2. Install specific version:
    ```bash
-   pip install aiblock==0.2.0
+   pip install lineage==0.2.0
    ```
 
 ### 5. Large File Handling
@@ -215,8 +215,8 @@ TimeoutError: Request timed out
 If you encounter issues not covered in this guide:
 
 1. Check the [GitHub Issues](https://github.com/AIBlockOfficial/2Way.py/issues)
-2. Join our [Discord Community](https://discord.gg/aiblock)
-3. Contact support at support@aiblock.dev
+2. Join our [Discord Community](https://discord.gg/lineage)
+3. Contact support at info@lineage.foundation
 
 ## Contributing
 

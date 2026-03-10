@@ -1,11 +1,11 @@
-# AIBlock Python SDK
+# Lineage Python SDK
 
-Python SDK for interacting with the AIBlock blockchain. This SDK provides a simple interface for wallet operations and blockchain queries.
+Python SDK for interacting with the Lineage blockchain. This SDK provides a simple interface for wallet operations and blockchain queries.
 
 ## Installation
 
 ```bash
-pip install aiblock
+pip install lineage
 ```
 
 ## Quick Start
@@ -13,7 +13,7 @@ pip install aiblock
 ### Basic Blockchain Queries
 
 ```python
-from aiblock.blockchain import BlockchainClient
+from lineage.blockchain import BlockchainClient
 
 # Initialize blockchain client
 client = BlockchainClient(
@@ -48,7 +48,7 @@ issued_supply = client.get_issued_supply()
 ### Wallet Operations
 
 ```python
-from aiblock.wallet import Wallet
+from lineage.wallet import Wallet
 
 # Create wallet
 wallet = Wallet()
@@ -89,17 +89,17 @@ else:
 - Create and sign transactions
 - Create item assets
 - Check balances
-- 2WayPayment protocol support
+- Two-way payment protocol support
 
 ## Configuration
 
 The SDK uses environment variables for configuration. Create a `.env` file:
 
 ```bash
-AIBLOCK_PASSPHRASE="your-secure-passphrase"
-AIBLOCK_STORAGE_HOST="https://storage.aiblock.dev"
-AIBLOCK_MEMPOOL_HOST="https://mempool.aiblock.dev"
-AIBLOCK_VALENCE_HOST="https://valence.aiblock.dev"
+LINEAGE_PASSPHRASE="your-secure-passphrase"
+LINEAGE_STORAGE_HOST="https://storage.aiblock.dev"
+LINEAGE_MEMPOOL_HOST="https://mempool.aiblock.dev"
+LINEAGE_VALENCE_HOST="https://valence.aiblock.dev"
 ```
 
 ## Error Handling

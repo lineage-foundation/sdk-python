@@ -8,7 +8,7 @@
 - Added `NetworkNotInitialized` error
 - Docs updated for IResult usage and error mappings
 - CI: added test job and publish-on-main with PyPI token
-- Config: standardized environment variables to `AIBLOCK_*` (`AIBLOCK_MEMPOOL_HOST`, `AIBLOCK_STORAGE_HOST`, `AIBLOCK_PASSPHRASE`, optional `AIBLOCK_VALENCE_HOST`)
+- Config: standardized environment variables to `LINEAGE_*` (`LINEAGE_MEMPOOL_HOST`, `LINEAGE_STORAGE_HOST`, `LINEAGE_PASSPHRASE`, optional `LINEAGE_VALENCE_HOST`)
 
 ## 0.2.8
 

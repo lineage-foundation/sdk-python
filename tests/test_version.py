@@ -1,7 +1,7 @@
 """Tests for version information."""
 
 import re
-from aiblock._version import (
+from lineage._version import (
     __version__,
     __version_tuple__,
     version,

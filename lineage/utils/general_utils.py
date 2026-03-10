@@ -5,7 +5,7 @@ import secrets
 import logging
 from typing import Any, Dict, Optional, Union
 
-from aiblock.interfaces import IErrorInternal, IResult
+from lineage.interfaces import IErrorInternal, IResult
 
 # Set up logging
 logger = logging.getLogger(__name__)

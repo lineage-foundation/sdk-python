@@ -3,13 +3,13 @@
 import time
 import pytest
 import logging
-from aiblock.validators import (
+from lineage.validators import (
     validate_metadata,
     validate_transaction,
     validate_transaction_fields
 )
-from aiblock.interfaces import IResult, IErrorInternal
-from aiblock.constants import MAX_METADATA_SIZE
+from lineage.interfaces import IResult, IErrorInternal
+from lineage.constants import MAX_METADATA_SIZE
 
 # Set up logging
 logger = logging.getLogger(__name__)

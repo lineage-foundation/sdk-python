@@ -1,16 +1,16 @@
 """
-AIBlock Python SDK
+Lineage Python SDK
 
-A Python SDK for interacting with the AIBlock blockchain.
+A Python SDK for interacting with the Lineage blockchain.
 """
 
-from aiblock.blockchain import BlockchainClient
-from aiblock.wallet import Wallet
-from aiblock.config import get_config, validate_config, get_default_config
-from aiblock import utils
+from lineage.blockchain import BlockchainClient
+from lineage.wallet import Wallet
+from lineage.config import get_config, validate_config, get_default_config
+from lineage import utils
 
 # Import key functions from key_handler
-from aiblock.key_handler import (
+from lineage.key_handler import (
     generate_seed_phrase,
     validate_seed_phrase,
     generate_master_key,

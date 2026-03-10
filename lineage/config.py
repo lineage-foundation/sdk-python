@@ -1,4 +1,4 @@
-"""Configuration module for the AIBlock SDK."""
+"""Configuration module for the Lineage SDK."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from enum import Enum
 import os
 import logging
 from dotenv import load_dotenv
-from aiblock.interfaces import IResult, IErrorInternal
+from lineage.interfaces import IResult, IErrorInternal
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 # Load environment variables from .env file
 load_dotenv()
 
-class AIBlockConfig(TypedDict):
-    """Type definition for AIBlock configuration."""
+class LineageConfig(TypedDict):
+    """Type definition for Lineage configuration."""
     passphrase: str
     mempoolHost: str
     storageHost: str
@@ -33,9 +33,9 @@ def get_config() -> IResult[Dict[str, str]]:
     
     # Required environment variables
     required_vars = {
-        'AIBLOCK_MEMPOOL_HOST': 'mempoolHost',
-        'AIBLOCK_STORAGE_HOST': 'storageHost',
-        'AIBLOCK_PASSPHRASE': 'passphrase'
+        'LINEAGE_MEMPOOL_HOST': 'mempoolHost',
+        'LINEAGE_STORAGE_HOST': 'storageHost',
+        'LINEAGE_PASSPHRASE': 'passphrase'
     }
     
     # Check for required environment variables
@@ -49,6 +49,10 @@ def get_config() -> IResult[Dict[str, str]]:
     
     if missing_vars:
         return IResult.err(f"Missing required environment variables: {', '.join(missing_vars)}")
+    
+    # Optional: valence host
+    if valence_host := os.getenv('LINEAGE_VALENCE_HOST'):
+        config['valenceHost'] = valence_host
     
     # Validate URLs
     for host_key in ['mempoolHost', 'storageHost']:
@@ -146,11 +150,11 @@ def validate_env_config(config: dict) -> IResult[dict]:
 
     return IResult.ok(config)
 
-def get_default_config() -> AIBlockConfig:
+def get_default_config() -> LineageConfig:
     """Get the default configuration dictionary.
     
     Returns:
-        AIBlockConfig: Default configuration with mainnet endpoints
+        LineageConfig: Default configuration with mainnet endpoints
     """
     return {
         'passphrase': '',  # Must be provided by user

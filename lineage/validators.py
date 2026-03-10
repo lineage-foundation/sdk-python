@@ -9,8 +9,8 @@ from enum import Enum
 from typing import Dict, Any, Optional, Union, List
 from urllib.parse import urlparse
 
-from aiblock.interfaces import IResult, IErrorInternal
-from aiblock.constants import MAX_METADATA_SIZE
+from lineage.interfaces import IResult, IErrorInternal
+from lineage.constants import MAX_METADATA_SIZE
 
 # Set up logging
 logger = logging.getLogger(__name__)

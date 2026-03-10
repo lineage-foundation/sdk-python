@@ -9,8 +9,8 @@ def test_endpoints():
     """Test various API endpoints to find working ones."""
     
     # Default hosts
-    storage_host = os.getenv('AIBLOCK_STORAGE_HOST', 'https://storage.aiblock.dev')
-    mempool_host = os.getenv('AIBLOCK_MEMPOOL_HOST', 'https://mempool.aiblock.dev')
+    storage_host = os.getenv('LINEAGE_STORAGE_HOST', 'https://storage.aiblock.dev')
+    mempool_host = os.getenv('LINEAGE_MEMPOOL_HOST', 'https://mempool.aiblock.dev')
     
     print(f"Testing endpoints...")
     print(f"Storage Host: {storage_host}")

@@ -3,8 +3,8 @@
 import pytest
 import requests
 import logging
-from aiblock.blockchain import BlockchainClient, get_headers, get_random_string
-from aiblock.interfaces import IResult, IErrorInternal
+from lineage.blockchain import BlockchainClient, get_headers, get_random_string
+from lineage.interfaces import IResult, IErrorInternal
 from typing import Dict, Any
 
 # Set up logging

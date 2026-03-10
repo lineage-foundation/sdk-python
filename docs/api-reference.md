@@ -1,14 +1,14 @@
-# AIBlock SDK API Reference
+# Lineage SDK API Reference
 
 ## Installation
 
 ```bash
-pip install aiblock
+pip install lineage
 ```
 
 ## Configuration
 
-The SDK requires a configuration dictionary for connecting to the AIBlock network:
+The SDK requires a configuration dictionary for connecting to the Lineage network:
 
 ```python
 config = {
@@ -21,12 +21,12 @@ config = {
 
 ## BlockchainClient
 
-The `BlockchainClient` class provides methods for interacting with the AIBlock blockchain.
+The `BlockchainClient` class provides methods for interacting with the Lineage blockchain.
 
 ### Initialization
 
 ```python
-from aiblock.blockchain import BlockchainClient
+from lineage.blockchain import BlockchainClient
 
 client = BlockchainClient(
     storage_host='https://storage.aiblock.dev',
@@ -153,7 +153,7 @@ The `Wallet` class manages cryptographic keys and blockchain addresses.
 ### Initialization
 
 ```python
-from aiblock.wallet import Wallet
+from lineage.wallet import Wallet
 
 # Create new wallet
 wallet = Wallet()
@@ -238,14 +238,14 @@ You can use environment variables for configuration:
 
 ```bash
 # .env file
-AIBLOCK_PASSPHRASE=your-secure-passphrase
-AIBLOCK_STORAGE_HOST=https://storage.aiblock.dev
-AIBLOCK_MEMPOOL_HOST=https://mempool.aiblock.dev
-AIBLOCK_VALENCE_HOST=https://valence.aiblock.dev
+LINEAGE_PASSPHRASE=your-secure-passphrase
+LINEAGE_STORAGE_HOST=https://storage.aiblock.dev
+LINEAGE_MEMPOOL_HOST=https://mempool.aiblock.dev
+LINEAGE_VALENCE_HOST=https://valence.aiblock.dev
 ```
 
 ```python
-from aiblock.config import get_config
+from lineage.config import get_config
 
 config = get_config()  # Loads from environment variables
 ```

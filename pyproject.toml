@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0", "wheel", "setuptools_scm>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aiblock"
+name = "lineage"
 version = "0.2.9"
-description = "Python SDK for interacting with the AIBlock blockchain"
+description = "Python SDK for interacting with the Lineage blockchain"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
-    { name = "AIBlock Team", email = "team@aiblock.dev" }
+    { name = "Lineage Foundation", email = "info@lineage.foundation" }
 ]
 requires-python = ">=3.8"
-keywords = ["blockchain", "aiblock", "cryptocurrency"]
+keywords = ["blockchain", "lineage", "cryptocurrency"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -37,20 +37,20 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AIBlockOfficial/2Way.py"
-Documentation = "https://github.com/AIBlockOfficial/2Way.py/tree/main/docs"
-"Bug Tracker" = "https://github.com/AIBlockOfficial/2Way.py/issues"
+Homepage = "https://github.com/lineage-foundation/sdk-python"
+Documentation = "https://github.com/lineage-foundation/sdk-python/tree/main/docs"
+"Bug Tracker" = "https://github.com/lineage-foundation/sdk-python/issues"
 
 [tool.setuptools]
 package-dir = {"" = "."}
-packages = ["aiblock", "aiblock.utils"]
+packages = ["lineage", "lineage.utils"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"aiblock" = ["py.typed"]
+"lineage" = ["py.typed"]
 
 [tool.setuptools_scm]
-write_to = "aiblock/_version.py"
+write_to = "lineage/_version.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
