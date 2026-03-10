@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This guide covers common issues you might encounter when using the AIBlock SDK and their solutions.
+This guide covers common issues you might encounter when using the Lineage SDK and their solutions.
 
 ## Common Issues
 
@@ -214,7 +214,7 @@ TimeoutError: Request timed out
 
 If you encounter issues not covered in this guide:
 
-1. Check the [GitHub Issues](https://github.com/AIBlockOfficial/2Way.py/issues)
+1. Check the [GitHub Issues](https://github.com/lineage-foundation/sdk-python/issues)
 2. Join our [Discord Community](https://discord.gg/lineage)
 3. Contact support at info@lineage.foundation
 

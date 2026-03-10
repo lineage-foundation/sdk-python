@@ -1,4 +1,4 @@
-"""Validation functions for AIBlock SDK."""
+"""Validation functions for Lineage SDK."""
 
 import json
 import logging

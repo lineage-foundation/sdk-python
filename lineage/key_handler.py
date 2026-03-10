@@ -1,4 +1,4 @@
-"""Key handling module for the AIBlock SDK."""
+"""Key handling module for the Lineage SDK."""
 
 from __future__ import annotations
 

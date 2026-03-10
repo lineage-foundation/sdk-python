@@ -71,7 +71,7 @@ class RouteConfig(TypedDict):
 
 @dataclass
 class Wallet:
-    """AIBlock wallet implementation.
+    """Lineage wallet implementation.
     
     Attributes:
         debug: Whether to enable debug output

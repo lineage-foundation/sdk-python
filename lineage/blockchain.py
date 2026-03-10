@@ -1,4 +1,4 @@
-"""Client for interacting with the AIBlock blockchain."""
+"""Client for interacting with the Lineage blockchain."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def handle_response(response) -> IResult[APIResponse]:
         return IResult.err(IErrorInternal.InternalError, f'Error processing response: {str(e)}')
 
 class BlockchainClient:
-    """Client for interacting with the AIBlock blockchain."""
+    """Client for interacting with the Lineage blockchain."""
     
     def __init__(self, storage_host: str, mempool_host: Optional[str] = None) -> None:
         """Initialize the blockchain client.
@@ -186,7 +186,7 @@ class BlockchainClient:
 
             # Prepare headers using shared generator
             headers = get_headers()
-            headers['User-Agent'] = f"AIBlock-Python-SDK/{self._get_version()}"
+            headers['User-Agent'] = f"Lineage-Python-SDK/{self._get_version()}"
 
             # Make the request
             if method.upper() == 'POST':
