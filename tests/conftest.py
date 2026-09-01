@@ -20,9 +20,9 @@ def valid_config():
     """Fixture providing a valid wallet configuration."""
     return {
         'passphrase': 'test_passphrase',
-        'mempoolHost': 'https://mempool.aiblock.dev',
-        'storageHost': 'https://storage.aiblock.dev',
-        'valenceHost': 'https://valence.aiblock.dev'
+        'mempoolHost': 'https://mempool.lineage.to',
+        'storageHost': 'https://storage.lineage.to',
+        'valenceHost': 'https://valence.lineage.to'
     }
 
 @pytest.fixture
@@ -34,9 +34,9 @@ def wallet_instance():
 def test_config() -> Dict[str, Any]:
     """Fixture providing test configuration."""
     return {
-        'mempoolHost': 'https://mempool.aiblock.dev',
-        'storageHost': 'https://storage.aiblock.dev',
-        'valenceHost': 'https://valence.aiblock.dev'
+        'mempoolHost': 'https://mempool.lineage.to',
+        'storageHost': 'https://storage.lineage.to',
+        'valenceHost': 'https://valence.lineage.to'
     }
 
 @pytest.fixture
@@ -72,27 +72,27 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock both GET and POST for debug_data
     requests_mock.get(
-        'https://mempool.aiblock.dev/debug_data',
+        'https://mempool.lineage.to/debug_data',
         json=debug_response
     )
     requests_mock.post(
-        'https://mempool.aiblock.dev/debug_data',
+        'https://mempool.lineage.to/debug_data',
         json=debug_response
     )
 
     # Mock storage debug data
     requests_mock.get(
-        'https://storage.aiblock.dev/debug_data',
+        'https://storage.lineage.to/debug_data',
         json=debug_response
     )
     requests_mock.post(
-        'https://storage.aiblock.dev/debug_data',
+        'https://storage.lineage.to/debug_data',
         json=debug_response
     )
 
     # Mock supply endpoint (/v1) - backs both total_supply and issued_supply
     requests_mock.get(
-        'https://mempool.aiblock.dev/v1/supply',
+        'https://mempool.lineage.to/v1/supply',
         json={
             'total': 1000000,
             'issued': 500000
@@ -101,7 +101,7 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock balance endpoint (/v1)
     requests_mock.post(
-        'https://mempool.aiblock.dev/v1/balances/query',
+        'https://mempool.lineage.to/v1/balances/query',
         json={
             'balance': {
                 'total': {
@@ -115,7 +115,7 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock item creation endpoint (/v1)
     requests_mock.post(
-        'https://mempool.aiblock.dev/v1/items',
+        'https://mempool.lineage.to/v1/items',
         status_code=201,
         json={
             'asset': {
@@ -131,7 +131,7 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock transaction creation endpoint (/v1)
     requests_mock.post(
-        'https://mempool.aiblock.dev/v1/transactions',
+        'https://mempool.lineage.to/v1/transactions',
         status_code=201,
         json={
             'transactions': {
@@ -145,7 +145,7 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock storage endpoints (/v1)
     requests_mock.get(
-        'https://storage.aiblock.dev/v1/blocks/latest',
+        'https://storage.lineage.to/v1/blocks/latest',
         json={
             'block_num': 1000,
             'block_hash': 'test_hash',
@@ -155,7 +155,7 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock block by number endpoint
     requests_mock.get(
-        'https://storage.aiblock.dev/v1/blocks',
+        'https://storage.lineage.to/v1/blocks',
         json={
             'block_num': 1000,
             'block_hash': 'test_hash',
@@ -166,7 +166,7 @@ def mock_api(requests_mock: requests_mock.Mocker):
 
     # Mock blockchain entries query endpoint
     requests_mock.post(
-        'https://storage.aiblock.dev/v1/blockchain-entries/query',
+        'https://storage.lineage.to/v1/blockchain-entries/query',
         json={
             'block_num': 1000,
             'block_hash': 'test_hash',

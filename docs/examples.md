@@ -12,9 +12,9 @@ pip install lineage-sdk
 
 Create a `.env` file:
 ```bash
-LINEAGE_STORAGE_HOST=https://storage.aiblock.dev
-LINEAGE_MEMPOOL_HOST=https://mempool.aiblock.dev
-LINEAGE_VALENCE_HOST=https://valence.aiblock.dev
+LINEAGE_STORAGE_HOST=https://storage.lineage.to
+LINEAGE_MEMPOOL_HOST=https://mempool.lineage.to
+LINEAGE_VALENCE_HOST=https://valence.lineage.to
 LINEAGE_PASSPHRASE=your-secure-passphrase
 ```
 
@@ -27,8 +27,8 @@ from lineage.blockchain import BlockchainClient
 
 # Initialize client
 client = BlockchainClient(
-    storage_host='https://storage.aiblock.dev',
-    mempool_host='https://mempool.aiblock.dev'
+    storage_host='https://storage.lineage.to',
+    mempool_host='https://mempool.lineage.to'
 )
 
 # Get latest block
@@ -170,9 +170,9 @@ def create_new_wallet():
     # Configuration
     config = {
         'passphrase': 'your-secure-passphrase',
-        'mempoolHost': 'https://mempool.aiblock.dev',
-        'storageHost': 'https://storage.aiblock.dev',
-        'valenceHost': 'https://valence.aiblock.dev'
+        'mempoolHost': 'https://mempool.lineage.to',
+        'storageHost': 'https://storage.lineage.to',
+        'valenceHost': 'https://valence.lineage.to'
     }
     
     # Initialize wallet from seed
@@ -199,9 +199,9 @@ def restore_wallet_from_seed(seed_phrase):
     
     config = {
         'passphrase': 'your-secure-passphrase',
-        'mempoolHost': 'https://mempool.aiblock.dev',
-        'storageHost': 'https://storage.aiblock.dev',
-        'valenceHost': 'https://valence.aiblock.dev'
+        'mempoolHost': 'https://mempool.lineage.to',
+        'storageHost': 'https://storage.lineage.to',
+        'valenceHost': 'https://valence.lineage.to'
     }
     
     result = wallet.from_seed(seed_phrase, config)
@@ -367,8 +367,8 @@ def validate_configuration(config):
 # Example usage
 config = {
     'passphrase': 'secure-passphrase',
-    'storageHost': 'https://storage.aiblock.dev',
-    'mempoolHost': 'https://mempool.aiblock.dev'
+    'storageHost': 'https://storage.lineage.to',
+    'mempoolHost': 'https://mempool.lineage.to'
 }
 
 if validate_configuration(config):

@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 def blockchain_client(mock_api) -> BlockchainClient:
     """Fixture providing an initialized blockchain client."""
     return BlockchainClient(
-        storage_host='https://storage.aiblock.dev',
-        mempool_host='https://mempool.aiblock.dev'
+        storage_host='https://storage.lineage.to',
+        mempool_host='https://mempool.lineage.to'
     )
 
 @pytest.fixture
 def storage_only_client(mock_api) -> BlockchainClient:
     """Fixture providing a blockchain client with only storage host."""
-    return BlockchainClient(storage_host='https://storage.aiblock.dev')
+    return BlockchainClient(storage_host='https://storage.lineage.to')
 
 def test_get_headers():
     """Test header generation."""
@@ -53,12 +53,12 @@ def test_get_latest_block(blockchain_client: BlockchainClient, mock_api):
     assert result.is_ok
     assert result.get_ok()['block_num'] == 1000
     assert result.get_ok()['block_hash'] == 'test_hash'
-    assert mock_api.last_request.url == 'https://storage.aiblock.dev/v1/blocks/latest'
+    assert mock_api.last_request.url == 'https://storage.lineage.to/v1/blocks/latest'
 
 def test_get_latest_block_not_found_when_empty(blockchain_client: BlockchainClient, mock_api):
     """A chain with no blocks yet returns 404, which must map to a not-found result, not a crash."""
     mock_api.get(
-        'https://storage.aiblock.dev/v1/blocks/latest',
+        'https://storage.lineage.to/v1/blocks/latest',
         status_code=404,
         json={'type': 'about:blank', 'title': 'Not Found', 'status': 404, 'detail': 'No blocks found'}
     )
@@ -70,7 +70,7 @@ def test_get_latest_block_not_found_when_empty(blockchain_client: BlockchainClie
 def test_get_latest_block_network_error(blockchain_client: BlockchainClient, mock_api):
     """Test network error handling when getting latest block."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks/latest",
+        "https://storage.lineage.to/v1/blocks/latest",
         exc=requests.exceptions.ConnectionError
     )
     result = blockchain_client.get_latest_block()
@@ -81,7 +81,7 @@ def test_get_latest_block_network_error(blockchain_client: BlockchainClient, moc
 def test_get_latest_block_invalid_json(blockchain_client: BlockchainClient, mock_api):
     """Test invalid JSON handling when getting latest block."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks/latest",
+        "https://storage.lineage.to/v1/blocks/latest",
         text="invalid json"
     )
     result = blockchain_client.get_latest_block()
@@ -114,7 +114,7 @@ def test_get_block_by_num_invalid_input(blockchain_client: BlockchainClient):
 def test_get_block_by_num_network_error(blockchain_client: BlockchainClient, mock_api):
     """Test network error handling when getting block by number."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks",
+        "https://storage.lineage.to/v1/blocks",
         exc=requests.exceptions.ConnectionError
     )
     result = blockchain_client.get_block_by_num(1000)
@@ -125,7 +125,7 @@ def test_get_block_by_num_network_error(blockchain_client: BlockchainClient, moc
 def test_get_block_by_num_not_found(blockchain_client: BlockchainClient, mock_api):
     """Test handling of non-existent block number."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks",
+        "https://storage.lineage.to/v1/blocks",
         status_code=404,
         json={'type': 'about:blank', 'title': 'Not Found', 'status': 404, 'detail': 'Block not found'}
     )
@@ -145,7 +145,7 @@ def test_get_blockchain_entry(blockchain_client: BlockchainClient, mock_api):
 def test_get_blockchain_entry_network_error(blockchain_client: BlockchainClient, mock_api):
     """Test network error handling when getting blockchain entry."""
     mock_api.post(
-        "https://storage.aiblock.dev/v1/blockchain-entries/query",
+        "https://storage.lineage.to/v1/blockchain-entries/query",
         exc=requests.exceptions.ConnectionError
     )
     result = blockchain_client.get_blockchain_entry('test_hash')
@@ -155,7 +155,7 @@ def test_get_blockchain_entry_network_error(blockchain_client: BlockchainClient,
 def test_get_blockchain_entry_method_not_allowed(blockchain_client: BlockchainClient, mock_api):
     """Test handling of method not allowed error."""
     mock_api.post(
-        "https://storage.aiblock.dev/v1/blockchain-entries/query",
+        "https://storage.lineage.to/v1/blockchain-entries/query",
         status_code=405,
         json={'type': 'about:blank', 'title': 'Method Not Allowed', 'status': 405, 'detail': 'Method not allowed'}
     )
@@ -222,12 +222,12 @@ def test_get_total_supply(blockchain_client: BlockchainClient, mock_api):
     assert result.is_ok
     assert result.get_ok()['total'] == 1000000
     assert result.get_ok()['issued'] == 500000
-    assert mock_api.last_request.url == 'https://mempool.aiblock.dev/v1/supply'
+    assert mock_api.last_request.url == 'https://mempool.lineage.to/v1/supply'
 
 def test_get_total_supply_error(blockchain_client: BlockchainClient, mock_api):
     """Test error handling when getting total supply."""
     mock_api.get(
-        "https://mempool.aiblock.dev/v1/supply",
+        "https://mempool.lineage.to/v1/supply",
         exc=requests.exceptions.ConnectionError
     )
     result = blockchain_client.get_total_supply()
@@ -252,7 +252,7 @@ def test_get_issued_supply(blockchain_client: BlockchainClient, mock_api):
 def test_get_issued_supply_error(blockchain_client: BlockchainClient, mock_api):
     """Test error handling when getting issued supply."""
     mock_api.get(
-        "https://mempool.aiblock.dev/v1/supply",
+        "https://mempool.lineage.to/v1/supply",
         exc=requests.exceptions.ConnectionError
     )
     result = blockchain_client.get_issued_supply()
@@ -263,7 +263,7 @@ def test_get_issued_supply_error(blockchain_client: BlockchainClient, mock_api):
 def test_get_issued_supply_pending(blockchain_client: BlockchainClient, mock_api):
     """Test handling of pending issued supply request."""
     mock_api.get(
-        "https://mempool.aiblock.dev/v1/supply",
+        "https://mempool.lineage.to/v1/supply",
         status_code=202,
         text="Request is being processed"
     )
@@ -282,7 +282,7 @@ def test_get_issued_supply_no_mempool(storage_only_client: BlockchainClient, moc
 def test_get_issued_supply_unknown_error(blockchain_client: BlockchainClient, mock_api):
     """Test handling of unknown error status code."""
     mock_api.get(
-        "https://mempool.aiblock.dev/v1/supply",
+        "https://mempool.lineage.to/v1/supply",
         status_code=418,
         text="I'm a teapot"
     )
@@ -294,7 +294,7 @@ def test_get_issued_supply_unknown_error(blockchain_client: BlockchainClient, mo
 def test_problem_json_error_uses_detail_over_title(blockchain_client: BlockchainClient, mock_api):
     """A problem+json body's `detail` should take priority over `title` for the error message."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks/latest",
+        "https://storage.lineage.to/v1/blocks/latest",
         status_code=400,
         json={'type': 'about:blank', 'title': 'Bad Request', 'status': 400, 'detail': 'num must be positive'}
     )
@@ -306,7 +306,7 @@ def test_problem_json_error_uses_detail_over_title(blockchain_client: Blockchain
 def test_problem_json_error_falls_back_to_title(blockchain_client: BlockchainClient, mock_api):
     """A problem+json body without `detail` should fall back to `title`."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks/latest",
+        "https://storage.lineage.to/v1/blocks/latest",
         status_code=401,
         json={'type': 'about:blank', 'title': 'Unauthorized', 'status': 401}
     )
@@ -318,7 +318,7 @@ def test_problem_json_error_falls_back_to_title(blockchain_client: BlockchainCli
 def test_server_error_maps_to_internal_server_error(blockchain_client: BlockchainClient, mock_api):
     """A 500 with a problem+json body maps to InternalServerError with the detail message."""
     mock_api.get(
-        "https://storage.aiblock.dev/v1/blocks/latest",
+        "https://storage.lineage.to/v1/blocks/latest",
         status_code=500,
         json={'type': 'about:blank', 'title': 'Internal Server Error', 'status': 500, 'detail': 'database unavailable'}
     )
@@ -330,8 +330,8 @@ def test_server_error_maps_to_internal_server_error(blockchain_client: Blockchai
 def test_api_key_sent_as_header(mock_api):
     """When configured, the API key should be sent as the x-api-key header."""
     client = BlockchainClient(
-        storage_host='https://storage.aiblock.dev',
-        mempool_host='https://mempool.aiblock.dev',
+        storage_host='https://storage.lineage.to',
+        mempool_host='https://mempool.lineage.to',
         api_key='my-secret-key'
     )
     result = client.get_latest_block()

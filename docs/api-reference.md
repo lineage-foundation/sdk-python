@@ -13,9 +13,9 @@ The SDK requires a configuration dictionary for connecting to the Lineage networ
 ```python
 config = {
     'passphrase': 'your-secure-passphrase',
-    'storageHost': 'https://storage.aiblock.dev',
-    'mempoolHost': 'https://mempool.aiblock.dev',
-    'valenceHost': 'https://valence.aiblock.dev'
+    'storageHost': 'https://storage.lineage.to',
+    'mempoolHost': 'https://mempool.lineage.to',
+    'valenceHost': 'https://valence.lineage.to'
 }
 ```
 
@@ -29,8 +29,8 @@ The `BlockchainClient` class provides methods for interacting with the Lineage b
 from lineage.blockchain import BlockchainClient
 
 client = BlockchainClient(
-    storage_host='https://storage.aiblock.dev',
-    mempool_host='https://mempool.aiblock.dev'  # Optional, required for supply methods
+    storage_host='https://storage.lineage.to',
+    mempool_host='https://mempool.lineage.to'  # Optional, required for supply methods
 )
 ```
 
@@ -168,9 +168,9 @@ print(f"Seed phrase: {seed_phrase}")
 ```python
 config = {
     'passphrase': 'your-secure-passphrase',
-    'mempoolHost': 'https://mempool.aiblock.dev',
-    'storageHost': 'https://storage.aiblock.dev',
-    'valenceHost': 'https://valence.aiblock.dev'
+    'mempoolHost': 'https://mempool.lineage.to',
+    'storageHost': 'https://storage.lineage.to',
+    'valenceHost': 'https://valence.lineage.to'
 }
 
 # Initialize wallet from seed
@@ -239,9 +239,9 @@ You can use environment variables for configuration:
 ```bash
 # .env file
 LINEAGE_PASSPHRASE=your-secure-passphrase
-LINEAGE_STORAGE_HOST=https://storage.aiblock.dev
-LINEAGE_MEMPOOL_HOST=https://mempool.aiblock.dev
-LINEAGE_VALENCE_HOST=https://valence.aiblock.dev
+LINEAGE_STORAGE_HOST=https://storage.lineage.to
+LINEAGE_MEMPOOL_HOST=https://mempool.lineage.to
+LINEAGE_VALENCE_HOST=https://valence.lineage.to
 ```
 
 ```python

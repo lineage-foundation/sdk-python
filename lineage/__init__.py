@@ -28,9 +28,9 @@ try:
     try:
         __version__ = _pkg_version("lineage-sdk")
     except _PkgNotFound:  # running from a source tree that isn't installed
-        __version__ = "1.0.0"
+        __version__ = "1.0.1"
 except ImportError:  # pragma: no cover - importlib.metadata is stdlib on 3.8+
-    __version__ = "1.0.0"
+    __version__ = "1.0.1"
 
 __all__ = [
     'BlockchainClient',

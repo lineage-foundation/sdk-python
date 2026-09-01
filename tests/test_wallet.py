@@ -123,7 +123,7 @@ def test_create_item_asset(wallet: Wallet, mock_api):
         version=wallet.current_keypair.version
     )
     assert response.is_ok
-    assert mock_api.last_request.url == 'https://mempool.aiblock.dev/v1/items'
+    assert mock_api.last_request.url == 'https://mempool.lineage.to/v1/items'
     body = mock_api.last_request.json()
     assert 'version' not in body
     assert body['item_amount'] == ITEM_DEFAULT
@@ -176,7 +176,7 @@ def test_create_item_asset_matches_golden_vector_signature(wallet: Wallet, mock_
 def test_create_item_asset_problem_json_error(wallet: Wallet, mock_api):
     """A problem+json error from /v1/items maps onto the SDK's error type."""
     mock_api.post(
-        'https://mempool.aiblock.dev/v1/items',
+        'https://mempool.lineage.to/v1/items',
         status_code=400,
         json={'type': 'about:blank', 'title': 'Bad Request', 'status': 400, 'detail': 'invalid genesis_hash_spec'}
     )
@@ -198,37 +198,37 @@ def test_2way_payment_methods(wallet: Wallet, mock_api):
     wallet.current_keypair = wallet.generate_keypair().get_ok()
 
     # Mock make_2way_payment endpoint
-    mock_api.post('https://mempool.aiblock.dev/make_2way_payment', json={
+    mock_api.post('https://mempool.lineage.to/make_2way_payment', json={
         'status': 'success',
         'reason': '2Way payment created',
         'content': {'druid': 'druid123', 'encryptedTx': 'encrypted_data'}
     })
     # Mock fetch_pending_2way_payments endpoint (mempool)
-    mock_api.post('https://mempool.aiblock.dev/fetch_pending_2way_payments', json={
+    mock_api.post('https://mempool.lineage.to/fetch_pending_2way_payments', json={
         'status': 'success',
         'reason': 'Fetched',
         'content': {'pending': {'druid123': {'details': 'pending details'}}}
     })
     # Mock fetch_pending_2way_payments endpoint (valence)
-    mock_api.post('https://valence.aiblock.dev/fetch_pending_2way_payments', json={
+    mock_api.post('https://valence.lineage.to/fetch_pending_2way_payments', json={
         'status': 'success',
         'reason': 'Fetched',
         'content': {'pending': {'druid123': {'encryptedTx': {'nonce': 'bm9uY2U=', 'ciphertext': 'Y2lwaGVydGV4dA=='}, 'senderPublicKey': 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='}}}
     })
     # Mock accept_2way_payment endpoint (valence)
-    mock_api.post('https://valence.aiblock.dev/accept_2way_payment', json={
+    mock_api.post('https://valence.lineage.to/accept_2way_payment', json={
         'status': 'success',
         'reason': 'Accepted',
         'content': {'result': 'accepted'}
     })
     # Mock reject_2way_payment endpoint (valence)
-    mock_api.post('https://valence.aiblock.dev/reject_2way_payment', json={
+    mock_api.post('https://valence.lineage.to/reject_2way_payment', json={
         'status': 'success',
         'reason': 'Rejected',
         'content': {'result': 'rejected'}
     })
     # Mock valence_set endpoint for make_2way_payment
-    mock_api.post('https://valence.aiblock.dev/valence_set', json={
+    mock_api.post('https://valence.lineage.to/valence_set', json={
         'status': 'success',
         'reason': 'Valence set successful',
         'content': {'result': 'valence_set'}
@@ -320,7 +320,7 @@ def test_sign_message(wallet: Wallet):
 def test_get_balance(wallet: Wallet, mock_api):
     """Test balance retrieval."""
     # Update mock to return the correct response structure
-    mock_api.post('https://mempool.aiblock.dev/v1/balances/query', json={
+    mock_api.post('https://mempool.lineage.to/v1/balances/query', json={
         'balance': {
             'total': {
                 'tokens': 0,
@@ -340,7 +340,7 @@ def test_get_balance(wallet: Wallet, mock_api):
 def test_create_transactions_insufficient_balance(wallet: Wallet, mock_api):
     """Test transaction creation with insufficient balance."""
     # Update mock to return zero balance
-    mock_api.post('https://mempool.aiblock.dev/v1/balances/query', json={
+    mock_api.post('https://mempool.lineage.to/v1/balances/query', json={
         'balance': {
             'total': {
                 'tokens': 0,
@@ -386,11 +386,11 @@ def test_create_transactions_matches_golden_vector(wallet: Wallet, mock_api):
     wallet.current_keypair = keypair(EXCESS_ADDRESS, ADDR2_PUBLIC_KEY_HEX, ADDR2_SECRET_KEY_HEX)
 
     mock_api.post(
-        'https://mempool.aiblock.dev/v1/balances/query',
+        'https://mempool.lineage.to/v1/balances/query',
         json={'balance': _fetch_balance_response()}
     )
     mock_api.post(
-        'https://mempool.aiblock.dev/v1/transactions',
+        'https://mempool.lineage.to/v1/transactions',
         status_code=201,
         json={
             'transactions': {
@@ -491,11 +491,11 @@ def test_create_transactions_problem_json_error(wallet: Wallet, mock_api):
     wallet.current_keypair = all_keypairs[0]
 
     mock_api.post(
-        'https://mempool.aiblock.dev/v1/balances/query',
+        'https://mempool.lineage.to/v1/balances/query',
         json={'balance': _fetch_balance_response()}
     )
     mock_api.post(
-        'https://mempool.aiblock.dev/v1/transactions',
+        'https://mempool.lineage.to/v1/transactions',
         status_code=400,
         json={'type': 'about:blank', 'title': 'Bad Request', 'status': 400, 'detail': 'invalid signature'}
     )
