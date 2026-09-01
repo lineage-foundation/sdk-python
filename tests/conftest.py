@@ -90,40 +90,20 @@ def mock_api(requests_mock: requests_mock.Mocker):
         json=debug_response
     )
 
-    # Mock total supply endpoint
+    # Mock supply endpoint (/v1) - backs both total_supply and issued_supply
     requests_mock.get(
-        'https://mempool.aiblock.dev/total_supply',
+        'https://mempool.aiblock.dev/v1/supply',
         json={
-            'id': '2345-6789-0123-4567',
-            'status': 'success',
-            'reason': 'Total supply retrieved successfully',
-            'content': {
-                'total_supply': 1000000
-            }
+            'total': 1000000,
+            'issued': 500000
         }
     )
 
-    # Mock issued supply endpoint
-    requests_mock.get(
-        'https://mempool.aiblock.dev/issued_supply',
-        json={
-            'id': '3456-7890-1234-5678',
-            'status': 'success',
-            'reason': 'Issued supply retrieved successfully',
-            'content': {
-                'issued_supply': 500000
-            }
-        }
-    )
-
-    # Mock balance endpoint
+    # Mock balance endpoint (/v1)
     requests_mock.post(
-        'https://mempool.aiblock.dev/fetch_balance',
+        'https://mempool.aiblock.dev/v1/balances/query',
         json={
-            'id': '4567-8901-2345-6789',
-            'status': 'success',
-            'reason': 'Balance successfully fetched',
-            'content': {
+            'balance': {
                 'total': {
                     'tokens': 0,
                     'items': {}
@@ -167,83 +147,36 @@ def mock_api(requests_mock: requests_mock.Mocker):
         }
     )
 
-    # Mock storage endpoints
+    # Mock storage endpoints (/v1)
     requests_mock.get(
-        'https://storage.aiblock.dev/latest_block',
+        'https://storage.aiblock.dev/v1/blocks/latest',
         json={
-            'id': '7890-1234-5678-9012',
-            'status': 'success',
-            'reason': 'Latest block retrieved successfully',
-            'content': {
-                'block_num': 1000,
-                'block_hash': 'test_hash',
-                'timestamp': 1234567890
-            }
+            'block_num': 1000,
+            'block_hash': 'test_hash',
+            'timestamp': 1234567890
         }
     )
 
-    # Mock block by number endpoint - now uses POST with array format
-    requests_mock.post(
-        'https://storage.aiblock.dev/block_by_num',
+    # Mock block by number endpoint
+    requests_mock.get(
+        'https://storage.aiblock.dev/v1/blocks',
         json={
-            'id': '8901-2345-6789-0123',
-            'status': 'success',
-            'reason': 'Block retrieved successfully',
-            'content': {
-                'block_num': 1000,
-                'block_hash': 'test_hash',
-                'timestamp': 1234567890,
-                'transactions': []
-            }
+            'block_num': 1000,
+            'block_hash': 'test_hash',
+            'timestamp': 1234567890,
+            'transactions': []
         }
     )
 
-    # Mock blockchain entry endpoint - now uses POST with array format
+    # Mock blockchain entries query endpoint
     requests_mock.post(
-        'https://storage.aiblock.dev/blockchain_entry',
+        'https://storage.aiblock.dev/v1/blockchain-entries/query',
         json={
-            'id': '9012-3456-7890-1234',
-            'status': 'success',
-            'reason': 'Blockchain entry retrieved successfully',
-            'content': {
-                'block_num': 1000,
-                'block_hash': 'test_hash',
-                'previous_hash': 'prev_hash',
-                'timestamp': 1234567890
-            }
+            'block_num': 1000,
+            'block_hash': 'test_hash',
+            'previous_hash': 'prev_hash',
+            'timestamp': 1234567890
         }
-    )
-
-    # Mock error responses for new POST endpoints
-    requests_mock.get(
-        'https://storage.aiblock.dev/latest_block_error',
-        status_code=500,
-        text='Server error occurred'
-    )
-
-    # Error mocks for POST endpoints
-    requests_mock.post(
-        'https://storage.aiblock.dev/block_by_num_error',
-        status_code=404,
-        text='Block not found'
-    )
-
-    requests_mock.post(
-        'https://storage.aiblock.dev/blockchain_entry_error',
-        status_code=405,
-        text='Method not allowed'
-    )
-
-    requests_mock.get(
-        'https://mempool.aiblock.dev/total_supply_error',
-        status_code=500,
-        text='Server error occurred'
-    )
-
-    requests_mock.get(
-        'https://mempool.aiblock.dev/issued_supply_error',
-        status_code=202,
-        text='Request is being processed'
     )
 
     return requests_mock

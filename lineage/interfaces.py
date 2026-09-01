@@ -185,10 +185,15 @@ class IScript:
 
 @dataclass(frozen=True)
 class IBalanceResponse:
-    """Interface for balance response."""
-    balance: int
-    pending: int
-    nonce: int
+    """Interface for a wallet balance, as returned by `POST /v1/balances/query`."""
+    total: Dict[str, Any]
+    address_list: Dict[str, Any]
+
+@dataclass(frozen=True)
+class ISupplyResponse:
+    """Interface for the `GET /v1/supply` response."""
+    total: int
+    issued: int
 
 @dataclass(frozen=True)
 class INewWalletResponse:

@@ -276,17 +276,15 @@ def test_sign_message(wallet: Wallet):
 def test_get_balance(wallet: Wallet, mock_api):
     """Test balance retrieval."""
     # Update mock to return the correct response structure
-    mock_api.post('https://mempool.aiblock.dev/fetch_balance', json={
-        'status': 'success',
-        'reason': 'Balance successfully fetched',
-        'content': {
+    mock_api.post('https://mempool.aiblock.dev/v1/balances/query', json={
+        'balance': {
             'total': {
                 'tokens': 0,
                 'items': {}
             }
         }
     })
-    
+
     balance_result = wallet.get_balance()
     assert balance_result.is_ok
     balance = balance_result.get_ok()
@@ -298,17 +296,15 @@ def test_get_balance(wallet: Wallet, mock_api):
 def test_create_transactions_insufficient_balance(wallet: Wallet, mock_api):
     """Test transaction creation with insufficient balance."""
     # Update mock to return zero balance
-    mock_api.post('https://mempool.aiblock.dev/fetch_balance', json={
-        'status': 'success',
-        'reason': 'Balance successfully fetched',
-        'content': {
+    mock_api.post('https://mempool.aiblock.dev/v1/balances/query', json={
+        'balance': {
             'total': {
                 'tokens': 0,
                 'items': {}
             }
         }
     })
-    
+
     # Try to create a transaction with more tokens than available
     result = wallet.create_transactions("destination_address", 100)
     assert result.is_err

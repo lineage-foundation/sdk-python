@@ -54,20 +54,7 @@ class WalletConfig(TypedDict):
     storageHost: NotRequired[str]
     valenceHost: NotRequired[str]
     passphrase: NotRequired[str]
-
-class RouteConfig(TypedDict):
-    """Type definition for route configuration.
-    
-    All fields represent the required proof-of-work difficulty (number of leading zeros)
-    for each route. A value of 0 means no proof-of-work is required.
-    """
-    fetch_balance: int
-    create_item_asset: int
-    create_transactions: int
-    total_supply: int
-    issued_supply: int
-    transaction_status: int
-    debug_data: int
+    apiKey: NotRequired[str]
 
 @dataclass
 class Wallet:
@@ -251,22 +238,6 @@ class Wallet:
             logger.error(f"Error initializing network: {str(e)}")
             return IResult.err(IErrorInternal.UnableToInitializeNetwork)
 
-    def _get_default_routes(self) -> RouteConfig:
-        """Get default route configuration.
-        
-        Returns:
-            RouteConfig: Default route configuration
-        """
-        return {
-                        'fetch_balance': 0,
-                        'create_item_asset': 0,
-                        'create_transactions': 0,
-                        'total_supply': 0,
-                        'issued_supply': 0,
-                        'transaction_status': 0,
-                        'debug_data': 0
-                    }
-
     def fetch_balance(self, address_list: List[str]) -> IResult[Dict[str, Any]]:
         """Fetch balance for a list of addresses.
         
@@ -290,18 +261,18 @@ class Wallet:
                 return IResult.err(IErrorInternal.InvalidParametersProvided, "No addresses provided")
 
             # Build headers using shared helper
-            headers = client_get_headers()
+            headers = client_get_headers(self.network_config.get('apiKey'))
 
             # Make request
-            url = f"{self.network_config.get('mempoolHost')}/fetch_balance"
-            response = requests.post(url, json=address_list, headers=headers, timeout=30)
+            url = f"{self.network_config.get('mempoolHost')}/v1/balances/query"
+            response = requests.post(url, json={'addresses': address_list}, headers=headers, timeout=30)
 
             # Unified response handling
             result = client_handle_response(response)
             if result.is_err:
                 return IResult.err(result.error, result.error_message)
             api_response = result.get_ok()
-            return IResult.ok(api_response.get('content'))
+            return IResult.ok(api_response.get('balance'))
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error fetching balance: {str(e)}")
@@ -339,43 +310,6 @@ class Wallet:
         except Exception as e:
             logger.error(f"Error getting debug data: {str(e)}")
             return IResult.err(IErrorInternal.UnableToGetDebugData)
-
-    def calculate_pow(self, data: Dict[str, Any], difficulty: int = 0) -> IResult[str]:
-        """Calculate proof of work for request data.
-        
-        Args:
-            data: Data to calculate proof of work for
-            difficulty: Required difficulty (number of leading zeros)
-            
-        Returns:
-            IResult[str]: Proof of work string or error
-        """
-        try:
-            # Convert data to canonical JSON string
-            data_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
-            
-            # Initialize counter
-            counter = 0
-            max_attempts = 1000000  # Prevent infinite loops
-            
-            while counter < max_attempts:
-                # Create test string with counter
-                test_str = f"{data_str}{counter}"
-                
-                # Calculate hash
-                hash_result = hashlib.sha256(test_str.encode()).hexdigest()
-                
-                # Check if hash meets difficulty requirement
-                if hash_result.startswith('0' * difficulty):
-                    return IResult.ok(str(counter))
-                
-                counter += 1
-                
-            return IResult.err(IErrorInternal.UnableToCalculateProofOfWork)
-                
-        except Exception as e:
-            logger.error(f"Error calculating proof of work: {str(e)}")
-            return IResult.err(IErrorInternal.UnableToCalculateProofOfWork)
 
     def calculate_transaction_hash(self, transaction: Dict[str, Any]) -> IResult[str]:
         """Calculate hash for a transaction.
@@ -1343,7 +1277,9 @@ def validate_wallet_config(config: Dict[str, Any], init_offline: bool = False) -
             wallet_config['storageHost'] = storage_host
         if valence_host := config.get('valenceHost'):
             wallet_config['valenceHost'] = valence_host
-            
+        if api_key := config.get('apiKey'):
+            wallet_config['apiKey'] = api_key
+
         return IResult.ok(wallet_config)
     except Exception as e:
         return IResult.err(IErrorInternal.InvalidParametersProvided, str(e))
