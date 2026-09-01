@@ -7,6 +7,9 @@ If any assertion here fails, the port is wrong - do not adjust the expected
 values, fix the implementation (or stop and report a blocker).
 """
 
+import hashlib
+import json
+
 from lineage.transaction import (
     construct_address,
     construct_signature,
@@ -112,6 +115,13 @@ def test_tx_in_out_signable_hash_null_previous_out():
             "script_public_key": PAYMENT_ADDRESS,
         }
     ]
-    with_none = construct_tx_in_out_signable_hash(None, outputs)
-    with_explicit_null = construct_tx_in_out_signable_hash(None, outputs)
-    assert with_none == with_explicit_null
+    # Independently build the expected preimage with the literal string "null"
+    # (not by calling the implementation), so this pins None -> "null" rather
+    # than asserting the function equals itself.
+    outputs_json = "".join(json.dumps(o, separators=(",", ":")) for o in outputs)
+    expected = hashlib.sha3_256((outputs_json + "null").encode("utf-8")).hexdigest()
+    assert construct_tx_in_out_signable_hash(None, outputs) == expected
+
+    # Guard against None being serialized as "" or "None" instead of "null".
+    wrong = hashlib.sha3_256((outputs_json + "").encode("utf-8")).hexdigest()
+    assert construct_tx_in_out_signable_hash(None, outputs) != wrong
