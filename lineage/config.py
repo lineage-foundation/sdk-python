@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TypedDict, Optional, Literal, Dict, Any
+from typing_extensions import NotRequired
 from dataclasses import dataclass
 from enum import Enum
 import os
@@ -22,6 +23,7 @@ class LineageConfig(TypedDict):
     mempoolHost: str
     storageHost: str
     valenceHost: str
+    apiKey: NotRequired[str]
 
 def get_config() -> IResult[Dict[str, str]]:
     """Get configuration from environment variables.
@@ -53,7 +55,11 @@ def get_config() -> IResult[Dict[str, str]]:
     # Optional: valence host
     if valence_host := os.getenv('LINEAGE_VALENCE_HOST'):
         config['valenceHost'] = valence_host
-    
+
+    # Optional: API key sent as the x-api-key header on every request
+    if api_key := os.getenv('LINEAGE_API_KEY'):
+        config['apiKey'] = api_key
+
     # Validate URLs
     for host_key in ['mempoolHost', 'storageHost']:
         url = config[host_key]
@@ -92,7 +98,12 @@ def validate_config(config: Dict[str, Any], init_offline: bool = False) -> IResu
         if not isinstance(config.get('storageHost'), str):
             logger.error("Missing or invalid storageHost")
             return IResult.err(IErrorInternal.InvalidParametersProvided, "Missing or invalid storageHost")
-            
+
+        # apiKey is optional, but must be a string when provided
+        if 'apiKey' in config and not isinstance(config.get('apiKey'), str):
+            logger.error("Invalid apiKey: not a string")
+            return IResult.err(IErrorInternal.InvalidParametersProvided, "Invalid apiKey")
+
         # Validate URLs
         logger.debug("Validating URLs")
         for host_key in ['mempoolHost', 'storageHost', 'valenceHost']:
@@ -147,6 +158,12 @@ def validate_env_config(config: dict) -> IResult[dict]:
                 IErrorInternal.InvalidParametersProvided,
                 f"Invalid URL for {host_key}: {url}"
             )
+
+    if 'apiKey' in config and config.get('apiKey') is not None and not isinstance(config.get('apiKey'), str):
+        return IResult.err(
+            IErrorInternal.InvalidParametersProvided,
+            "Invalid type for apiKey: expected string"
+        )
 
     return IResult.ok(config)
 

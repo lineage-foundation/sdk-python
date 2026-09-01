@@ -15,10 +15,12 @@ pip install lineage
 ```python
 from lineage.blockchain import BlockchainClient
 
-# Initialize blockchain client
+# Initialize blockchain client. api_key is optional and, when set, is sent
+# as the x-api-key header on every request.
 client = BlockchainClient(
     storage_host='https://storage.aiblock.dev',
-    mempool_host='https://mempool.aiblock.dev'
+    mempool_host='https://mempool.aiblock.dev',
+    api_key='your-api-key'
 )
 
 # Query blockchain
@@ -40,7 +42,7 @@ transaction = client.get_transaction_by_hash('tx_hash')
 # Get multiple transactions
 transactions = client.fetch_transactions(['hash1', 'hash2'])
 
-# Get supply information (requires mempool host)
+# Get supply information (requires mempool host) - returns {total, issued}
 total_supply = client.get_total_supply()
 issued_supply = client.get_issued_supply()
 ```
@@ -57,12 +59,14 @@ wallet = Wallet()
 seed_phrase = wallet.generate_seed_phrase()
 print(f"Seed phrase: {seed_phrase}")
 
-# Initialize wallet from seed
+# Initialize wallet from seed. apiKey is optional and, when set, is sent
+# as the x-api-key header on every mempool request.
 config = {
     'passphrase': 'your-secure-passphrase',
     'mempoolHost': 'https://mempool.aiblock.dev',
     'storageHost': 'https://storage.aiblock.dev',
-    'valenceHost': 'https://valence.aiblock.dev'
+    'valenceHost': 'https://valence.aiblock.dev',
+    'apiKey': 'your-api-key'
 }
 
 result = wallet.from_seed(seed_phrase, config)
@@ -70,6 +74,31 @@ if result.is_ok:
     print(f"Wallet address: {wallet.get_address()}")
 else:
     print(result.error, result.error_message)
+
+# Check balance - fetch_balance returns {balance: {address: {...}}}
+balance_result = wallet.fetch_balance([wallet.current_keypair.address])
+if balance_result.is_ok:
+    print(balance_result.get_ok())
+
+# Create an item asset via POST /v1/items. On success this returns
+# {asset, to_address, tx_hash}.
+item_result = wallet.create_item_asset(
+    secret_key=wallet.current_keypair.secret_key,
+    public_key=wallet.current_keypair.public_key,
+    amount=1
+)
+if item_result.is_ok:
+    print(item_result.get_ok())
+
+# Send a payment. This builds and signs a real UTXO transaction client-side
+# (the same construction as sdk-js) and submits it via POST /v1/transactions.
+# On success this returns {transaction_hash, payment_address, asset, used_addresses}.
+payment_result = wallet.create_transactions(
+    destination_address='recipient-address',
+    amount=100
+)
+if payment_result.is_ok:
+    print(payment_result.get_ok())
 ```
 
 ## Features
@@ -86,10 +115,26 @@ else:
 ### Wallet Operations
 - Generate and manage seed phrases
 - Create and manage keypairs
-- Create and sign transactions
+- Construct and submit real, client-signed transactions (payments)
 - Create item assets
 - Check balances
-- Two-way payment protocol support
+- Two-way payment protocol support (via the separate valence service)
+
+All of the above talk to the `/v1` REST API on the mempool/storage hosts.
+Reads and writes go through `lineage/blockchain.py`'s shared transport,
+which maps `application/problem+json` error bodies onto the SDK's
+`IResult` error types. The 2-way payment flow (`make_2way_payment`,
+`fetch_pending_2way_payments`, `accept_2way_payment`, `reject_2way_payment`)
+is unrelated to `/v1` - it talks to the valence node directly and its
+wire format hasn't changed.
+
+`create_transactions` now does real work: it fetches the current balance
+for the spending addresses, selects UTXOs, builds and signs a
+`CreateTransaction` the same way sdk-js does, and submits it to
+`POST /v1/transactions`. Previously this only produced a signed payload
+without ever confirming it reached the network - callers who relied on
+the old behaviour should check `payment_result.get_ok()['transaction_hash']`
+to confirm the payment was actually accepted.
 
 ## Configuration
 
@@ -100,6 +145,9 @@ LINEAGE_PASSPHRASE="your-secure-passphrase"
 LINEAGE_STORAGE_HOST="https://storage.aiblock.dev"
 LINEAGE_MEMPOOL_HOST="https://mempool.aiblock.dev"
 LINEAGE_VALENCE_HOST="https://valence.aiblock.dev"
+
+# Optional - sent as the x-api-key header on every /v1 request
+LINEAGE_API_KEY="your-api-key"
 ```
 
 ## Error Handling
@@ -121,7 +169,7 @@ else:
 2. Install uv (https://docs.astral.sh/uv/)
 3. Run tests: `uv pip install -q pytest requests-mock && uv run pytest -q`
 
-All 68 tests pass, ensuring reliability and compatibility.
+The suite is offline by default; tests marked `integration` talk to a live network and are excluded from the default run.
 
 ## Documentation
 

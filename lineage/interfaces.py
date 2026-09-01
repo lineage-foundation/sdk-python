@@ -185,10 +185,36 @@ class IScript:
 
 @dataclass(frozen=True)
 class IBalanceResponse:
-    """Interface for balance response."""
-    balance: int
-    pending: int
-    nonce: int
+    """Interface for a wallet balance, as returned by `POST /v1/balances/query`."""
+    total: Dict[str, Any]
+    address_list: Dict[str, Any]
+
+@dataclass(frozen=True)
+class ISupplyResponse:
+    """Interface for the `GET /v1/supply` response."""
+    total: int
+    issued: int
+
+@dataclass(frozen=True)
+class IItemAssetResponse:
+    """Interface for the `POST /v1/items` response."""
+    asset: Dict[str, Any]
+    to_address: str
+    tx_hash: str
+
+@dataclass(frozen=True)
+class IMakePaymentResponse:
+    """Interface for the mapped result of a `POST /v1/transactions` payment.
+
+    `transaction_hash`/`payment_address`/`asset` are read off the
+    `{<tx_hash>: {address, asset}}` map in the API response;
+    `used_addresses` is the set of the wallet's own addresses whose UTXOs
+    were spent as inputs, echoed back for the caller's bookkeeping.
+    """
+    transaction_hash: str
+    payment_address: str
+    asset: Dict[str, Any]
+    used_addresses: List[str]
 
 @dataclass(frozen=True)
 class INewWalletResponse:
