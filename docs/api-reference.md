@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-pip install lineage
+pip install lineage-sdk
 ```
 
 ## Configuration

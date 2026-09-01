@@ -276,9 +276,9 @@ class BlockchainClient:
     def _get_version(self) -> str:
         """Get the SDK version from installed metadata, fallback to project version."""
         try:
-            return _importlib_metadata.version('lineage')
+            return _importlib_metadata.version('lineage-sdk')
         except Exception:
-            return "0.2.8"
+            return "1.0.0"
 
     def _get_random_string(self, length: int) -> str:
         """Generate a random string of specified length."""

@@ -7,7 +7,7 @@ This document provides practical examples of using the Lineage SDK for various b
 First, install the SDK and set up your environment:
 
 ```bash
-pip install lineage
+pip install lineage-sdk
 ```
 
 Create a `.env` file:

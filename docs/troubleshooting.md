@@ -132,7 +132,7 @@ ImportError: Cannot import name 'X' from 'lineage'
 
 2. Install specific version:
    ```bash
-   pip install lineage==0.2.0
+   pip install lineage-sdk==1.0.0
    ```
 
 ### 5. Large File Handling
