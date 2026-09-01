@@ -84,10 +84,13 @@ def construct_tx_in_out_signable_hash(
     JSON-serialized `previous_out` (the literal string "null" if there is
     no previous_out), and the whole preimage is sha3_256-hashed.
     """
+    # ensure_ascii=False so non-ASCII (e.g. item metadata) is emitted as raw
+    # UTF-8, matching JS JSON.stringify — escaping it as \uXXXX would produce a
+    # different preimage and an invalid signature.
     signable_tx_outs = ''.join(
-        json.dumps(tx_out, separators=(',', ':')) for tx_out in outputs
+        json.dumps(tx_out, separators=(',', ':'), ensure_ascii=False) for tx_out in outputs
     )
-    signable_tx_in = json.dumps(previous_out, separators=(',', ':'))
+    signable_tx_in = json.dumps(previous_out, separators=(',', ':'), ensure_ascii=False)
     preimage = f"{signable_tx_outs}{signable_tx_in}"
     return hashlib.sha3_256(get_string_bytes(preimage)).hexdigest()
 

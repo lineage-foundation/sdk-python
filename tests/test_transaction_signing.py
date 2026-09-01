@@ -306,3 +306,31 @@ def test_create_payment_tx_scenario_b_with_excess_matches_golden_vector():
     assert result["create_tx"] == expected_create_tx
     assert result["excess_address_used"] is True
     assert result["used_addresses"] == [ADDR1_ADDRESS]
+
+
+def test_signable_hash_emits_non_ascii_as_raw_utf8():
+    """Non-ASCII in a signable output must be raw UTF-8, not \\uXXXX-escaped.
+
+    Matches JS JSON.stringify. Pins ensure_ascii=False so item metadata with
+    non-ASCII characters produces the same preimage (and signature) as sdk-js.
+    """
+    outputs = [
+        {
+            "value": {
+                "Item": {"amount": 1, "genesis_hash": "g", "metadata": "café-☃"}
+            },
+            "locktime": 0,
+            "script_public_key": PAYMENT_ADDRESS,
+        }
+    ]
+    outputs_json = "".join(
+        json.dumps(o, separators=(",", ":"), ensure_ascii=False) for o in outputs
+    )
+    expected = hashlib.sha3_256((outputs_json + "null").encode("utf-8")).hexdigest()
+    assert construct_tx_in_out_signable_hash(None, outputs) == expected
+
+    # Guard: the escaped (ensure_ascii=True) preimage must NOT match — i.e. the
+    # implementation is genuinely emitting raw UTF-8.
+    escaped_json = "".join(json.dumps(o, separators=(",", ":")) for o in outputs)
+    escaped = hashlib.sha3_256((escaped_json + "null").encode("utf-8")).hexdigest()
+    assert construct_tx_in_out_signable_hash(None, outputs) != escaped
