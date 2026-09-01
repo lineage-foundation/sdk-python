@@ -19,9 +19,9 @@ This guide covers common issues you might encounter when using the Lineage SDK a
 1. Check if your environment variables are set correctly:
    ```env
    # .env file in your project directory
-   LINEAGE_STORAGE_HOST=https://storage.aiblock.dev
-   LINEAGE_MEMPOOL_HOST=https://mempool.aiblock.dev
-   LINEAGE_VALENCE_HOST=https://valence.aiblock.dev
+   LINEAGE_STORAGE_HOST=https://storage.lineage.to
+   LINEAGE_MEMPOOL_HOST=https://mempool.lineage.to
+   LINEAGE_VALENCE_HOST=https://valence.lineage.to
    ```
 
 2. Verify network connectivity:

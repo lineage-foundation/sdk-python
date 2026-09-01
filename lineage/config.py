@@ -175,7 +175,7 @@ def get_default_config() -> LineageConfig:
     """
     return {
         'passphrase': '',  # Must be provided by user
-        'storageHost': 'https://storage.aiblock.dev',
-        'mempoolHost': 'https://mempool.aiblock.dev',
-        'valenceHost': 'https://valence.aiblock.dev'
+        'storageHost': 'https://storage.lineage.to',
+        'mempoolHost': 'https://mempool.lineage.to',
+        'valenceHost': 'https://valence.lineage.to'
     } 

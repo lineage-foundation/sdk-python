@@ -24,8 +24,8 @@ from lineage.blockchain import BlockchainClient
 # Initialize blockchain client. api_key is optional and, when set, is sent
 # as the x-api-key header on every request.
 client = BlockchainClient(
-    storage_host='https://storage.aiblock.dev',
-    mempool_host='https://mempool.aiblock.dev',
+    storage_host='https://storage.lineage.to',
+    mempool_host='https://mempool.lineage.to',
     api_key='your-api-key'
 )
 
@@ -69,9 +69,9 @@ print(f"Seed phrase: {seed_phrase}")
 # as the x-api-key header on every mempool request.
 config = {
     'passphrase': 'your-secure-passphrase',
-    'mempoolHost': 'https://mempool.aiblock.dev',
-    'storageHost': 'https://storage.aiblock.dev',
-    'valenceHost': 'https://valence.aiblock.dev',
+    'mempoolHost': 'https://mempool.lineage.to',
+    'storageHost': 'https://storage.lineage.to',
+    'valenceHost': 'https://valence.lineage.to',
     'apiKey': 'your-api-key'
 }
 
@@ -148,9 +148,9 @@ The SDK uses environment variables for configuration. Create a `.env` file:
 
 ```bash
 LINEAGE_PASSPHRASE="your-secure-passphrase"
-LINEAGE_STORAGE_HOST="https://storage.aiblock.dev"
-LINEAGE_MEMPOOL_HOST="https://mempool.aiblock.dev"
-LINEAGE_VALENCE_HOST="https://valence.aiblock.dev"
+LINEAGE_STORAGE_HOST="https://storage.lineage.to"
+LINEAGE_MEMPOOL_HOST="https://mempool.lineage.to"
+LINEAGE_VALENCE_HOST="https://valence.lineage.to"
 
 # Optional - sent as the x-api-key header on every /v1 request
 LINEAGE_API_KEY="your-api-key"

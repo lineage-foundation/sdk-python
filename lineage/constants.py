@@ -1,4 +1,4 @@
-"""Constants used throughout the AIBlock SDK."""
+"""Constants used throughout the Lineage SDK."""
 
 # Address versions
 ADDRESS_VERSION = 1

@@ -278,7 +278,7 @@ class BlockchainClient:
         try:
             return _importlib_metadata.version('lineage-sdk')
         except Exception:
-            return "1.0.0"
+            return "1.0.1"
 
     def _get_random_string(self, length: int) -> str:
         """Generate a random string of specified length."""

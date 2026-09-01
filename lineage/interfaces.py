@@ -1,4 +1,4 @@
-"""Type definitions and interfaces for the AIBlock SDK."""
+"""Type definitions and interfaces for the Lineage SDK."""
 
 from __future__ import annotations
 
