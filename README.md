@@ -5,7 +5,13 @@ Python SDK for interacting with the Lineage blockchain. This SDK provides a simp
 ## Installation
 
 ```bash
-pip install lineage
+pip install lineage-sdk
+```
+
+The distribution is published as `lineage-sdk`; the import name is `lineage`:
+
+```python
+import lineage
 ```
 
 ## Quick Start

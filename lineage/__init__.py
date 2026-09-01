@@ -23,7 +23,14 @@ from lineage.key_handler import (
     construct_address
 )
 
-__version__ = "0.2.9"
+try:
+    from importlib.metadata import version as _pkg_version, PackageNotFoundError as _PkgNotFound
+    try:
+        __version__ = _pkg_version("lineage-sdk")
+    except _PkgNotFound:  # running from a source tree that isn't installed
+        __version__ = "1.0.0"
+except ImportError:  # pragma: no cover - importlib.metadata is stdlib on 3.8+
+    __version__ = "1.0.0"
 
 __all__ = [
     'BlockchainClient',
