@@ -57,9 +57,13 @@ def _extract_problem_detail(response) -> str:
 def handle_response(response) -> IResult[Any]:
     """Handle a `/v1` API response.
 
-    On success (HTTP 200) the parsed JSON body is returned as-is. On failure
-    the response is expected to carry an `application/problem+json` body
-    (`detail`/`title`), which is mapped onto the SDK's internal error types.
+    On success (any 2xx other than 202) the parsed JSON body is returned
+    as-is - `/v1/items` and `/v1/transactions` reply `201`, while reads
+    reply `200`. `202` keeps its existing "still processing" semantics and
+    is treated as a (non-fatal) pending result, not a plain success. On
+    failure the response is expected to carry an `application/problem+json`
+    body (`detail`/`title`), which is mapped onto the SDK's internal error
+    types.
 
     Args:
         response: The response object from the API request.
@@ -68,7 +72,7 @@ def handle_response(response) -> IResult[Any]:
         IResult[Any]: The parsed JSON body on success, or an error result.
     """
     try:
-        if response.status_code == 200:
+        if 200 <= response.status_code < 300 and response.status_code != 202:
             try:
                 return IResult.ok(response.json())
             except ValueError:

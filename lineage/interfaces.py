@@ -196,6 +196,27 @@ class ISupplyResponse:
     issued: int
 
 @dataclass(frozen=True)
+class IItemAssetResponse:
+    """Interface for the `POST /v1/items` response."""
+    asset: Dict[str, Any]
+    to_address: str
+    tx_hash: str
+
+@dataclass(frozen=True)
+class IMakePaymentResponse:
+    """Interface for the mapped result of a `POST /v1/transactions` payment.
+
+    `transaction_hash`/`payment_address`/`asset` are read off the
+    `{<tx_hash>: {address, asset}}` map in the API response;
+    `used_addresses` is the set of the wallet's own addresses whose UTXOs
+    were spent as inputs, echoed back for the caller's bookkeeping.
+    """
+    transaction_hash: str
+    payment_address: str
+    asset: Dict[str, Any]
+    used_addresses: List[str]
+
+@dataclass(frozen=True)
 class INewWalletResponse:
     """Interface for new wallet response."""
     seed_phrase: str

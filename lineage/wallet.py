@@ -18,8 +18,13 @@ from dataclasses import dataclass, field
 from lineage.interfaces import (
     IErrorInternal, IResult, IMasterKey,
     IKeypair, IKeypairEncrypted, INetworkConfig,
-    IClientConfig, INetworkRoute, ITransactionData,
-    ITransaction, IBalanceResponse, INewWalletResponse, IMasterKeyEncrypted
+    IClientConfig, INetworkRoute,
+    IBalanceResponse, INewWalletResponse, IMasterKeyEncrypted
+)
+from lineage.transaction import (
+    construct_tx_in_signable_asset_hash,
+    construct_signature as tx_construct_signature,
+    create_payment_tx,
 )
 from lineage.key_handler import (
     get_passphrase_buffer,
@@ -524,37 +529,43 @@ class Wallet:
         self,
         secret_key: bytes,
         public_key: bytes,
-        version: Optional[int],
+        version: Optional[int] = ADDRESS_VERSION,
         amount: int = ITEM_DEFAULT,
         default_genesis_hash: bool = True,
         metadata: Optional[Dict[str, Any]] = None
     ) -> IResult:
-        """Create item assets payload and send to mempool. Matches JS SDK's createItemPayload logic.
+        """Create an item asset via `POST /v1/items`. Matches sdk-js's `createItemPayload`.
+
+        The signature is produced exactly as `lineage/transaction.py`'s
+        `construct_tx_in_signable_asset_hash` + `construct_signature` do
+        (golden-vector-verified against sdk-js) - the preimage is the plain
+        string `Item:<amount>`, deliberately excluding `genesis_hash` and
+        `metadata`. The legacy `version` field is not sent on the wire.
 
         Args:
-            secret_key (bytes): The 64-byte secret key (signing key seed).
+            secret_key (bytes): The 32-byte ed25519 seed (signing key).
             public_key (bytes): The public key bytes.
-            version (Optional[int]): The address version associated with the keys.
+            version (Optional[int]): The address version to derive `script_public_key`
+                with. Defaults to this SDK's `ADDRESS_VERSION` (the default/latest
+                address, matching sdk-js's `null`).
             amount (int, optional): Amount of items to create. Defaults to ITEM_DEFAULT.
             default_genesis_hash (bool, optional): Whether to use default genesis hash spec. Defaults to True.
             metadata (Optional[Dict[str, Any]], optional): Optional metadata dictionary. Defaults to None.
 
         Returns:
-            IResult: Result of the operation, containing API response content on success.
+            IResult: `{asset, to_address, tx_hash}` on success, or an error result.
         """
         try:
             # 1. Validate Inputs & Derive Address
-            logger.debug(f"create_item_asset received secret_key length: {len(secret_key) if secret_key else 'None'}") # Log length
             if not secret_key:
                  logger.error("Invalid secret_key provided (must not be empty)")
                  return IResult.err(IErrorInternal.InvalidKeypairProvided, "Invalid secret_key")
 
-            logger.debug(f"create_item_asset received public_key length: {len(public_key) if public_key else 'None'}") # Log length
             if not public_key or len(public_key) != 32:
                  logger.error("Invalid public_key provided (must be 32 bytes)")
                  return IResult.err(IErrorInternal.InvalidKeypairProvided, "Invalid public_key")
 
-            if version is None: # Explicitly require version now, matching JS createItemPayload needs
+            if version is None:
                  logger.error("Address version must be provided")
                  return IResult.err(IErrorInternal.InvalidParametersProvided, "Address version is required")
 
@@ -564,7 +575,6 @@ class Wallet:
                 logger.error("Failed to construct address from public key and version: %s", address_result.error_message)
                 return IResult.err(IErrorInternal.UnableToConstructDefaultAddress, address_result.error_message)
             address = address_result.get_ok()
-            logger.debug(f"Using derived address: {address} for version: {version}")
 
             # 2. Validate Metadata
             if metadata:
@@ -576,132 +586,156 @@ class Wallet:
                 if metadata_result.is_err:
                      logger.error("Metadata validation failed: %s", metadata_result.error_message)
                      return IResult.err(IErrorInternal.InvalidMetadataFormat, metadata_result.error_message)
-            else:
-                metadata = {} # Ensure metadata is always a dict for hashing
 
             # 3. Check Network Initialization
-            if not self.network_config.get('mempoolHost'):
+            if not self.network_config or not self.network_config.get('mempoolHost'):
                 logger.error("Network not initialized (mempoolHost missing)")
                 return IResult.err(IErrorInternal.NetworkNotInitialized)
 
-            # 4. Prepare Data for Hashing (Match JS SDK 'asset' structure for hash)
-            asset_data_for_hash = {
-            "item_amount": amount,
-                "metadata": metadata # Use the validated or default metadata dict
-            }
-
-            # 5. Generate Signable Hash (of amount and metadata)
-            signable_hash_result = self.get_signable_asset_hash(asset_data_for_hash)
-            if signable_hash_result.is_err:
-                logger.error("Failed to generate signable asset hash: %s", signable_hash_result.error_message)
-                return IResult.err(IErrorInternal.UnableToGenerateSignableHash, signable_hash_result.error_message)
-            signable_hash_bytes = signable_hash_result.get_ok() # Should be bytes
-
-            # 6. Sign the Hash using the provided 32-byte secret key (seed)
+            # 4. Sign the asset hash (Item:<amount>, matching transaction.py/sdk-js exactly)
+            asset_hash = construct_tx_in_signable_asset_hash({'Item': {'amount': amount}})
             try:
-                # Initialize SigningKey from the 32-byte seed stored in IKeypair.secret_key
-                signing_key = nacl.signing.SigningKey(seed=secret_key) # Ensure seed= is used
-                signature_bytes = signing_key.sign(signable_hash_bytes).signature
-                signature_hex = signature_bytes.hex()
-                logger.debug("Successfully signed asset hash. Signature: %s", signature_hex)
+                signature_hex = tx_construct_signature(asset_hash, secret_key)
             except Exception as sign_err:
                 logger.error("Failed to sign asset hash: %s", str(sign_err))
                 return IResult.err(IErrorInternal.UnableToSignMessage, f"Failed to sign asset hash: {str(sign_err)}")
 
-            # 7. Construct Final API Payload (Match JS SDK's createItemPayload return structure)
-            public_key_hex = public_key.hex() # Already have bytes
-            genesis_hash_spec_value = "Default" if default_genesis_hash else "Create"
-
+            # 5. Construct Final API Payload - no `version` field on the wire.
             request_data = {
                 "item_amount": amount,
-                "script_public_key": address, # Use derived address
-                "public_key": public_key_hex,
+                "genesis_hash_spec": "Default" if default_genesis_hash else "Create",
+                "metadata": json.dumps(metadata) if metadata else None,
+                "script_public_key": address,
+                "public_key": public_key.hex(),
                 "signature": signature_hex,
-                "version": version, # Use provided version
-                "genesis_hash_spec": genesis_hash_spec_value,
-                "metadata": metadata if metadata else None # Send original metadata (or null if it was None)
             }
-            logger.debug("Constructed API request payload: %s", json.dumps(request_data, indent=2))
 
-            # 8. Get Headers & Make Request
-            headers = client_get_headers()
-            logger.debug("Request Headers: %s", headers)
-            api_endpoint = f"{self.network_config.get('mempoolHost')}/create_item_asset"
+            # 6. Get Headers & Make Request
+            headers = client_get_headers(self.network_config.get('apiKey'))
+            api_endpoint = f"{self.network_config.get('mempoolHost')}/v1/items"
             logger.info("Sending POST request to %s", api_endpoint)
 
             try:
                 response = requests.post(api_endpoint, json=request_data, headers=headers, timeout=10)
-                logger.debug("Received response status code: %s", response.status_code)
-                logger.debug("Received response body: %s", response.text)
             except requests.exceptions.RequestException as e:
                 logger.error("Network request failed: %s", str(e))
                 return IResult.err(IErrorInternal.NetworkError, str(e))
 
-            # 9. Handle response using shared handler
+            # 7. Handle response using shared handler
             handled = client_handle_response(response)
             if handled.is_err:
                 return IResult.err(handled.error, handled.error_message)
             logger.info("create_item_asset successful.")
-            return IResult.ok(handled.get_ok().get('content'))
+            return IResult.ok(handled.get_ok())
 
         except Exception as e:
             logger.error(f"Unexpected error in create_item_asset: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
             return IResult.err(IErrorInternal.InternalError, str(e))
 
-    def create_transactions(self, destination_address: str, amount: int) -> IResult[ITransaction]:
-        """Create a new transaction.
-        
+    def create_transactions(
+        self,
+        destination_address: str,
+        amount: int,
+        all_keypairs: Optional[List[IKeypair]] = None,
+        excess_keypair: Optional[IKeypair] = None,
+        locktime: int = 0,
+    ) -> IResult[Dict[str, Any]]:
+        """Make a client-signed token payment via `POST /v1/transactions`.
+
+        Matches sdk-js's `makeTokenPayment`/`makePayment`: fetches the
+        latest balance for `all_keypairs`' addresses, builds and signs the
+        UTXO `CreateTransaction` with `lineage/transaction.py`'s
+        `create_payment_tx` (golden-vector-verified against sdk-js), then
+        submits it. `fees: null` is added to the wire body only - it is
+        never part of the signed structure.
+
         Args:
-            destination_address: Destination address
-            amount: Amount to transfer
-            
+            destination_address: Address to pay.
+            amount: Token amount to pay (int).
+            all_keypairs: Keypairs whose UTXOs may be spent as inputs.
+                Defaults to `[self.current_keypair]` for a plain
+                single-address wallet.
+            excess_keypair: Keypair to receive any change/excess output.
+                Defaults to `self.current_keypair`.
+            locktime: Locktime for the payment output. Defaults to 0.
+
         Returns:
-            IResult[ITransaction]: Transaction or error
+            IResult[Dict[str, Any]]: `{transaction_hash, payment_address,
+            asset, used_addresses}` on success, or an error result.
         """
         try:
             if not self.current_keypair:
                 return IResult.err(IErrorInternal.WalletNotInitialized)
 
-            # Get current balance
-            balance_result = self.fetch_balance([self.current_keypair.address])
+            if all_keypairs is None:
+                all_keypairs = [self.current_keypair]
+            if not all_keypairs:
+                return IResult.err(IErrorInternal.InvalidParametersProvided, "No keypairs provided")
+
+            if excess_keypair is None:
+                excess_keypair = self.current_keypair
+
+            all_addresses = [keypair.address for keypair in all_keypairs]
+            keypair_map = {keypair.address: keypair for keypair in all_keypairs}
+
+            # Get current balance for the spending addresses
+            balance_result = self.fetch_balance(all_addresses)
             if balance_result.is_err:
-                return IResult.err(IErrorInternal.UnableToFetchBalance)
-
+                return IResult.err(balance_result.error, balance_result.error_message)
             balance = balance_result.get_ok()
-            if balance['total']['tokens'] < amount:
-                return IResult.err(IErrorInternal.InsufficientFunds)
 
-            # Create transaction data
-            tx_data = ITransactionData(
-                timestamp=int(time.time() * 1000),
-                sender=self.current_keypair.address,
-                receiver=destination_address,
-                amount=amount,
-                fee=0,  # Fee calculation should be implemented
-                metadata={
-                    "action": "transfer",
-                    "app": "wallet",
-                    "data": {}
-                }
-            )
+            payment_asset = {'Token': amount}
 
-            # Sign transaction
-            signature_result = self.sign_request(tx_data)
-            if signature_result.is_err:
-                return signature_result
+            try:
+                payment_body = create_payment_tx(
+                    destination_address,
+                    payment_asset,
+                    excess_keypair.address,
+                    balance,
+                    keypair_map,
+                    locktime,
+                )
+            except ValueError as e:
+                if str(e) == 'InsufficientFunds':
+                    return IResult.err(IErrorInternal.InsufficientFunds, str(e))
+                return IResult.err(IErrorInternal.InvalidParametersProvided, str(e))
 
-            transaction = ITransaction(
-                data=tx_data,
-                signature=signature_result.get_ok()
-            )
+            create_tx = payment_body['create_tx']
+            used_addresses = payment_body['used_addresses']
 
-            return IResult.ok(transaction)
+            # `fees` isn't part of the signed transaction - it's an explicit
+            # (nullable) field required by the `/v1/transactions` DTO.
+            request_body = {'transactions': [{**create_tx, 'fees': None}]}
+
+            headers = client_get_headers(self.network_config.get('apiKey'))
+            url = f"{self.network_config.get('mempoolHost')}/v1/transactions"
+
+            try:
+                response = requests.post(url, json=request_body, headers=headers, timeout=30)
+            except requests.exceptions.RequestException as e:
+                logger.error("Network request failed: %s", str(e))
+                return IResult.err(IErrorInternal.NetworkError, str(e))
+
+            handled = client_handle_response(response)
+            if handled.is_err:
+                return IResult.err(handled.error, handled.error_message)
+
+            transactions = handled.get_ok().get('transactions') or {}
+            transaction_hash = next(iter(transactions), None)
+            if transaction_hash is None:
+                return IResult.err(IErrorInternal.InvalidNetworkResponse, "No transaction returned")
+            tx_result = transactions[transaction_hash]
+
+            return IResult.ok({
+                'transaction_hash': transaction_hash,
+                'payment_address': tx_result.get('address'),
+                'asset': tx_result.get('asset'),
+                'used_addresses': used_addresses,
+            })
 
         except Exception as e:
             logger.error("Error creating transaction: %s", str(e))
-            return IResult.err(IErrorInternal.InternalError)
+            return IResult.err(IErrorInternal.InternalError, str(e))
 
     def generate_seed_phrase(self) -> str:
         """Generate a new seed phrase.

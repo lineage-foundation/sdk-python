@@ -113,36 +113,32 @@ def mock_api(requests_mock: requests_mock.Mocker):
         }
     )
 
-    # Mock item creation endpoint
+    # Mock item creation endpoint (/v1)
     requests_mock.post(
-        'https://mempool.aiblock.dev/create_item_asset',
+        'https://mempool.aiblock.dev/v1/items',
+        status_code=201,
         json={
-            'id': '5678-9012-3456-7890',
-            'status': 'success',
-            'reason': 'Item asset(s) created',
-            'content': {
-                'asset': {
-                    'asset': {
-                        'Item': {
-                            'amount': 1000,
-                            'genesis_hash': 'default_genesis_hash',
-                            'metadata': None
-                        }
-                    }
-                }
-            }
+            'asset': {
+                'kind': 'item',
+                'amount': 1000,
+                'genesis_hash': 'default_genesis_hash',
+                'metadata': None
+            },
+            'to_address': 'test_to_address',
+            'tx_hash': 'test_tx_hash'
         }
     )
 
-    # Mock transaction creation endpoint
+    # Mock transaction creation endpoint (/v1)
     requests_mock.post(
-        'https://mempool.aiblock.dev/create_transactions',
+        'https://mempool.aiblock.dev/v1/transactions',
+        status_code=201,
         json={
-            'id': '6789-0123-4567-8901',
-            'status': 'success',
-            'reason': 'Transaction created successfully',
-            'content': {
-                'transaction_id': 'test-tx-id'
+            'transactions': {
+                'test-tx-hash': {
+                    'address': 'test_destination_address',
+                    'asset': {'kind': 'token', 'amount': 100}
+                }
             }
         }
     )
