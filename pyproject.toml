@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lineage"
-version = "0.2.9"
+version = "1.0.0"
 description = "Python SDK for interacting with the Lineage blockchain"
 readme = "README.md"
 license = { file = "LICENSE" }

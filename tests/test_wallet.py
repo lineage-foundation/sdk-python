@@ -530,18 +530,6 @@ def test_transaction_signing(wallet: Wallet):
     assert isinstance(signature, str)
     assert len(signature) > 0
 
-def test_headers_generation(wallet: Wallet):
-    """Test API headers generation."""
-    headers = wallet.get_headers()
-    assert 'Content-Type' in headers
-    assert 'Accept' in headers
-    assert 'Request-ID' in headers
-    assert 'Nonce' in headers
-    assert headers['Content-Type'] == 'application/json'
-    assert headers['Accept'] == 'application/json'
-    assert len(headers['Request-ID']) > 0
-    assert len(headers['Nonce']) > 0
-
 def test_invalid_seed_phrase():
     """Test that invalid seed phrases are properly rejected."""
     invalid_seed = "not a valid seed phrase at all"

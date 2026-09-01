@@ -42,7 +42,6 @@ from lineage.utils import (
 )
 from lineage.utils.general_utils import (
     get_random_bytes,
-    get_random_string
 )
 from lineage.constants import ADDRESS_VERSION, ITEM_DEFAULT, SEED_REGEN_THRES, TEMP_ADDRESS_VERSION
 from lineage.config import get_config, validate_env_config, validate_config
@@ -465,19 +464,6 @@ class Wallet:
                 IErrorInternal.UnableToGenerateSignableHash,
                 f"Failed to generate signable hash: {str(e)}"
             )
-
-    def get_headers(self) -> Dict[str, str]:
-        """Get headers for API requests.
-        
-        Returns:
-            Dict[str, str]: Headers including Content-Type, Accept, Request-ID, and Nonce
-        """
-        return {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Request-ID': str(uuid.uuid4()),
-            'Nonce': get_random_string(32)
-        }
 
     def get_balance(self) -> IResult[Dict[str, Any]]:
         """Get balance for the current address as an IResult for consistency."""
