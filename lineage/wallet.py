@@ -25,6 +25,8 @@ from lineage.transaction import (
     construct_tx_in_signable_asset_hash,
     construct_signature as tx_construct_signature,
     create_payment_tx,
+    create_2w_tx_half as tx_create_2w_tx_half,
+    construct_tx_ins_address as tx_construct_tx_ins_address,
 )
 from lineage.key_handler import (
     get_passphrase_buffer,
@@ -35,6 +37,7 @@ from lineage.key_handler import (
     construct_address,
     decrypt_keypair,
     generate_keypair_from_seed,
+    generate_druid,
 )
 from lineage.validators import validate_metadata
 from lineage.utils import (
@@ -46,6 +49,8 @@ from lineage.utils.general_utils import (
 from lineage.constants import ADDRESS_VERSION, ITEM_DEFAULT, SEED_REGEN_THRES, TEMP_ADDRESS_VERSION
 from lineage.config import get_config, validate_env_config, validate_config
 from lineage.blockchain import BlockchainClient, get_headers as client_get_headers, handle_response as client_handle_response
+from lineage.valence import ValenceClient
+import nacl.secret
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -890,369 +895,373 @@ class Wallet:
             'version': keypair['version']
         }
 
+    def _valence_client(self) -> ValenceClient:
+        """Build a `ValenceClient` against this wallet's configured valence host."""
+        return ValenceClient(self.network_config.get("valenceHost"))
+
+    def _to_ikeypair(self, keypair: Any) -> IKeypair:
+        """Normalize a plain keypair (`IKeypair` or an equivalent dict) into
+        an `IKeypair`, hex-decoding `secret_key`/`public_key` if needed.
+
+        The 2-way flow methods take already-decrypted (plain) keypairs -
+        matching this SDK's existing `create_transactions`' `all_keypairs`
+        convention - not `IKeypairEncrypted`.
+        """
+        if isinstance(keypair, IKeypair):
+            return keypair
+        if isinstance(keypair, dict):
+            secret_key = keypair['secret_key']
+            public_key = keypair['public_key']
+            if isinstance(secret_key, str):
+                secret_key = bytes.fromhex(secret_key)
+            if isinstance(public_key, str):
+                public_key = bytes.fromhex(public_key)
+            return IKeypair(
+                address=keypair['address'],
+                secret_key=secret_key,
+                public_key=public_key,
+                version=keypair.get('version', ADDRESS_VERSION),
+            )
+        return keypair
+
+    def _build_keypair_map(self, all_keypairs: list) -> tuple:
+        """Normalize `all_keypairs` into `(addresses, {address: IKeypair})`,
+        matching sdk-go's `decryptKeypairsMap` / sdk-php's
+        `decryptKeypairsMap` shape (this SDK's keypairs are already plain,
+        so there is nothing to decrypt here beyond normalization).
+        """
+        addresses: List[str] = []
+        keypair_map: Dict[str, IKeypair] = {}
+        for kp in all_keypairs:
+            ikp = self._to_ikeypair(kp)
+            addresses.append(ikp.address)
+            keypair_map[ikp.address] = ikp
+        return addresses, keypair_map
+
+    def _encrypt_2w_half(self, create_tx: dict) -> dict:
+        """Seal a 2-way payment half (`create_tx`) under the wallet's own
+        passphrase key for local persistence.
+
+        This is entirely local - unrelated to valence, which only ever sees
+        plaintext - and reuses the same secretbox construction as this
+        module's `encrypt_keypair`/`key_handler.decrypt_keypair` (sha256 of
+        the passphrase as the 32-byte key).
+        """
+        key = hashlib.sha256(self.passphrase_key or b'').digest()
+        box = nacl.secret.SecretBox(key)
+        plaintext = json.dumps(create_tx, separators=(',', ':')).encode('utf-8')
+        encrypted = box.encrypt(plaintext)
+        druid_info = create_tx.get('druid_info') or {}
+        return {
+            'druid': druid_info.get('druid'),
+            'nonce': base64.b64encode(encrypted.nonce).decode('utf-8'),
+            'save': base64.b64encode(encrypted.ciphertext).decode('utf-8'),
+        }
+
+    def _decrypt_2w_half(self, encrypted_half: dict) -> dict:
+        """Open a 2-way payment half sealed by `_encrypt_2w_half`."""
+        key = hashlib.sha256(self.passphrase_key or b'').digest()
+        box = nacl.secret.SecretBox(key)
+        nonce = base64.b64decode(encrypted_half['nonce'])
+        ciphertext = base64.b64decode(encrypted_half['save'])
+        plaintext = box.decrypt(ciphertext, nonce)
+        return json.loads(plaintext.decode('utf-8'))
+
+    def _submit_2w_half(self, host: str, tx: dict) -> IResult:
+        """POST `tx` to `host`'s `/v1/transactions`, with `fees` and
+        `druid_info.genesis_hash` explicitly null.
+
+        Matches sdk-go's `submitTwoWayHalf` / sdk-php's `submitTwoWayHalf`:
+        a 2-way half's constructed `druid_info` never carries `genesis_hash`
+        - it is added here, last, only for the wire submission - and `fees`
+        isn't part of the signed transaction, it's a separate, always-null
+        field the `/v1` DTO requires.
+        """
+        druid_info = dict(tx.get('druid_info') or {})
+        druid_info['genesis_hash'] = None
+        body = {
+            'transactions': [{
+                'inputs': tx['inputs'],
+                'outputs': tx['outputs'],
+                'version': tx['version'],
+                'druid_info': druid_info,
+                'fees': None,
+            }]
+        }
+        headers = client_get_headers(self.network_config.get('apiKey'))
+        try:
+            response = requests.post(f"{host}/v1/transactions", json=body, headers=headers, timeout=30)
+        except requests.exceptions.RequestException as e:
+            logger.error("Network request failed submitting 2-way half: %s", str(e))
+            return IResult.err(IErrorInternal.NetworkError, str(e))
+        return client_handle_response(response)
+
     def make_2way_payment(
         self,
         payment_address: str,
         sending_asset: dict,
         receiving_asset: dict,
         all_keypairs: list,
-        receive_address: dict,
+        receive_keypair: Any,
     ) -> IResult:
+        """Offer a two-way (DRUID) trade to `payment_address`: this wallet
+        will pay `sending_asset` to `payment_address` in exchange for
+        `receiving_asset` delivered to `receive_keypair`'s address.
+
+        Builds this party's transaction half (sourcing inputs from
+        `all_keypairs`' addresses, change back to `receive_keypair`'s
+        address), posts the plaintext offer to valence (addressed to
+        `payment_address`'s mailbox, signed by `receive_keypair`), and
+        returns a pending half - this party's half, sealed at rest under the
+        wallet's passphrase key - for the caller to persist until
+        `fetch_pending_2way_payment` reports it settled. Mirrors sdk-go's
+        `Wallet.Make2WayPayment` / sdk-php's `Client::make2WayPayment`.
+        """
         try:
-            # 1. Decrypt the receiving keypair
-            receiver_keypair_result = self.decrypt_keypair(receive_address)
-            if receiver_keypair_result.is_err:
-                return receiver_keypair_result
-            receiver_keypair = receiver_keypair_result.get_ok()
+            if not all_keypairs:
+                return IResult.err(IErrorInternal.InvalidParametersProvided, "No keypairs provided")
 
-            # 2. Get all addresses and keypair map
-            all_addresses, keypair_map = self.get_all_addresses_and_keypair_map(all_keypairs)
+            receive_kp = self._to_ikeypair(receive_keypair)
+            addresses, keypair_map = self._build_keypair_map(all_keypairs)
 
-            # 3. Fetch balance
-            balance_result = self.fetch_balance(all_addresses)
+            balance_result = self.fetch_balance(addresses)
             if balance_result.is_err:
                 return balance_result
             balance = balance_result.get_ok()
 
-            # 4. Generate DRUID
-            druid = self.generate_druid()
+            druid = generate_druid()
 
-            # 5. Construct sender/receiver expectations
-            sender_expectation = {
-                "from": "",
-                "to": receiver_keypair.address,
-                "asset": receiving_asset,
-            }
-            receiver_expectation = {
-                "from": "",
-                "to": payment_address,
-                "asset": sending_asset,
-            }
+            # sender_expectation: what this (sending) party expects to receive.
+            # receiver_expectation: what the counterparty (payee) is owed by this half.
+            sender_expectation = {"from": "", "to": receive_kp.address, "asset": receiving_asset}
+            receiver_expectation = {"from": "", "to": payment_address, "asset": sending_asset}
 
-            # 6. Create the half-transaction
-            send_2w_tx_half = self.create_2w_tx_half(
-                balance, druid, sender_expectation, receiver_expectation, receiver_keypair.address, keypair_map
+            my_half = tx_create_2w_tx_half(
+                druid, sender_expectation, receiver_expectation, balance,
+                keypair_map, receive_kp.address, 0,
             )
+            create_tx = my_half["create_tx"]
 
-            # 7. Encrypt the transaction (JS SDK: sender = wallet user, receiver = counterparty)
-            # sender_keypair: the wallet user's keypair (self.current_keypair)
-            # receiver_public_key: the counterparty's public key (receiver_keypair.public_key)
-            encrypted_tx = self.encrypt_transaction(
-                send_2w_tx_half["createTx"],
-                sender_keypair=self.current_keypair,
-                receiver_public_key=receiver_keypair.public_key
-            )
+            # Now that this half's inputs are known, fill in the "from" the
+            # counterparty will use to correlate their acceptance transaction.
+            receiver_expectation["from"] = tx_construct_tx_ins_address(create_tx["inputs"])
 
-            # 8. Prepare payload for valence node
-            receiver_expectation["from"] = self.construct_tx_ins_address(send_2w_tx_half["createTx"]["inputs"])
-            value_payload = {
+            encrypted_half = self._encrypt_2w_half(create_tx)
+
+            details = {
                 "druid": druid,
                 "senderExpectation": sender_expectation,
                 "receiverExpectation": receiver_expectation,
                 "status": "pending",
                 "mempoolHost": self.network_config.get("mempoolHost"),
             }
-            send_body = self.generate_valence_set_body(payment_address, value_payload, druid)
-            send_headers = self.generate_verification_headers(payment_address, receiver_keypair, value_payload)
 
-            # 9. POST to valence node
-            valence_host = self.network_config.get("valenceHost")
-            response = requests.post(f"{valence_host}/valence_set", json=send_body, headers=send_headers, timeout=30)
-            handled = client_handle_response(response)
-            if handled.is_err:
-                return IResult.err(handled.error, handled.error_message)
+            post_result = self._valence_client().post(payment_address, receive_kp, details)
+            if post_result.is_err:
+                return post_result
 
-            # 10. Return DRUID and encrypted transaction
-            return IResult.ok({"druid": druid, "encryptedTx": encrypted_tx})
-
+            return IResult.ok({
+                "druid": druid,
+                "encryptedHalf": encrypted_half,
+                "senderExpectation": sender_expectation,
+                "receiverExpectation": receiver_expectation,
+            })
+        except ValueError as e:
+            if str(e) == 'InsufficientFunds':
+                return IResult.err(IErrorInternal.InsufficientFunds, str(e))
+            return IResult.err(IErrorInternal.InvalidParametersProvided, str(e))
         except Exception as e:
             logger.error(f"Error in make_2way_payment: {str(e)}")
             return IResult.err(IErrorInternal.InternalError, str(e))
 
-    def select_utxos_for_2way(self, balance, asset, address):
+    def fetch_pending_2way_payment(self, stored: list, all_keypairs: list) -> IResult:
+        """Poll this wallet's own mailboxes - one per address in
+        `all_keypairs`, deduplicated - and do both of this wallet's possible
+        roles in a two-way (DRUID) trade against whatever it finds there:
+
+        1. Acceptor discovery: an offer `make_2way_payment` posts is
+           addressed to whichever of the counterparty's own addresses it was
+           handed as `payment_address`, so it lands in one of *our* mailboxes
+           here. Any mailbox entry whose druid isn't in `stored` - this
+           wallet never initiated it - is surfaced as-is in the returned
+           `pending` map for the caller to inspect and
+           `accept_2way_payment`/`reject_2way_payment`.
+        2. Initiator settlement: an offer this wallet made shows up back in
+           its own mailbox once the counterparty accepts. For any such entry
+           - druid present in `stored`, status `"accepted"` - the stored
+           half is decrypted, its `druid_info` expectation is replaced with
+           the counterparty-filled `senderExpectation` now on the mailbox
+           entry, the resulting transaction is submitted to this wallet's
+           own mempool, and the settled mailbox entry is deleted.
+
+        A failure against one mailbox, or one mailbox entry, never discards
+        progress already made against the others: `pending` and `settled`
+        are accumulated across every mailbox regardless of errors elsewhere.
+        Errors are collected (not swallowed) under `errors` in the returned
+        payload. Mirrors sdk-go's `Wallet.FetchPending2WayPayment` / sdk-php's
+        `Client::fetchPending2WayPayment`.
         """
-        Port of JS selectUtxosFor2Way.
-        Returns (utxos, change).
-        """
-        asset_type = next(iter(asset.keys()))
-        asset_amount = next(iter(asset.values()))
-        utxos = []
-        total = 0
-        for utxo in balance.get("utxos", []):
-            if (
-                utxo.get("assetType") == asset_type
-                and utxo.get("address") == address
-            ):
-                utxos.append(utxo)
-                total += utxo.get("amount", 0)
-                if total >= asset_amount:
-                    break
-        if total < asset_amount:
-            raise ValueError("Insufficient UTXOs for 2WayPayment.")
-        change = total - asset_amount
-        return utxos, change
+        try:
+            addresses, keypair_map = self._build_keypair_map(all_keypairs)
 
-    def sign_transaction(self, tx, keypair):
-        """
-        1:1 port of JS signTransaction for 2WayPayment.
-        Signs each input with the sender's keypair using Ed25519 (nacl).
-        Returns a list of hex signatures (one per input).
-        """
-        import nacl.signing
-        import json
-        signatures = []
-        # Prepare the message to sign for each input (can be the tx minus signatures field)
-        tx_copy = dict(tx)
-        tx_copy.pop('signatures', None)
-        # Canonical JSON encoding
-        tx_bytes = json.dumps(tx_copy, sort_keys=True, separators=(",", ":")).encode()
-        signing_key = nacl.signing.SigningKey(keypair['secret_key'] if isinstance(keypair, dict) else keypair.secret_key)
-        for _ in tx['inputs']:
-            sig = signing_key.sign(tx_bytes).signature.hex()
-            signatures.append(sig)
-        return signatures
+            stored_by_druid: Dict[str, Any] = {}
+            for half in stored or []:
+                druid_key = half['druid'] if isinstance(half, dict) else half.druid
+                stored_by_druid[druid_key] = half
 
-    def create_2w_tx_half(
-        self,
-        balance: dict,
-        druid: str,
-        sender_expectation: dict,
-        receiver_expectation: dict,
-        address: str,
-        keypair_map: dict,
-    ) -> dict:
-        """
-        1:1 port of JS SDK's create2WTxHalf for 2WayPayment.
-        """
-        # 1. Select UTXOs to cover the asset being sent
-        utxos, change = self.select_utxos_for_2way(
-            balance, receiver_expectation['asset'], address
-        )
-        # 2. Build transaction inputs
-        inputs = [
-            {
-                "txid": utxo["txid"],
-                "vout": utxo["vout"],
-                "address": utxo["address"],
-                "assetType": utxo["assetType"],
-                "amount": utxo["amount"],
-            }
-            for utxo in utxos
-        ]
-        # 3. Build transaction outputs
-        asset_type = next(iter(receiver_expectation['asset'].keys()))
-        asset_amount = next(iter(receiver_expectation['asset'].values()))
-        outputs = [
-            {
-                "address": receiver_expectation["to"],
-                "assetType": asset_type,
-                "amount": asset_amount,
-            }
-        ]
-        if change > 0:
-            outputs.append({
-                "address": address,
-                "assetType": asset_type,
-                "amount": change,
-            })
-        # 4. Attach DRUID and expectations
-        druid_info = {
-            "druid": druid,
-            "senderExpectation": sender_expectation,
-            "receiverExpectation": receiver_expectation,
-        }
-        # 5. Build the transaction object
-        tx = {
-            "inputs": inputs,
-            "outputs": outputs,
-            "druidInfo": druid_info,
-            "timestamp": int(time.time() * 1000),
-            "version": 1,
-        }
-        # 6. Sign the transaction
-        sender_keypair = keypair_map[address]
-        tx["signatures"] = self.sign_transaction(tx, sender_keypair)
-        return {"createTx": tx}
+            pending: Dict[str, Any] = {}
+            settled: List[str] = []
+            errors: List[str] = []
 
-    def encrypt_transaction(self, tx, sender_keypair=None, receiver_public_key=None):
-        """
-        Port of JS SDK's encryptTransaction.
-        Encrypts the transaction object using NaCl Box (asymmetric, shared secret between sender and receiver).
-        Returns base64-encoded ciphertext and nonce.
-        """
-        import nacl.public
-        import nacl.utils
-        import base64
-        import json
+            vc = self._valence_client()
+            seen_mailbox = set()
 
-        if sender_keypair is None or receiver_public_key is None:
-            raise ValueError("Both sender_keypair and receiver_public_key are required for encryption.")
-
-        # Serialize tx to canonical JSON
-        tx_bytes = json.dumps(tx, sort_keys=True, separators=(",", ":")).encode()
-
-        # Prepare keys
-        sender_private = nacl.public.PrivateKey(sender_keypair['secret_key'] if isinstance(sender_keypair, dict) else sender_keypair.secret_key)
-        receiver_pub = nacl.public.PublicKey(receiver_public_key)
-        box = nacl.public.Box(sender_private, receiver_pub)
-        nonce = nacl.utils.random(nacl.public.Box.NONCE_SIZE)
-        encrypted = box.encrypt(tx_bytes, nonce)
-        return {
-            "ciphertext": base64.b64encode(encrypted.ciphertext).decode(),
-            "nonce": base64.b64encode(nonce).decode(),
-        }
-
-    def generate_druid(self):
-        """Generate a unique DRUID (transaction identifier), matching JS SDK's getNewDRUID."""
-        import uuid
-        return f"DRUID{uuid.uuid4().hex}"
-
-    def generate_valence_set_body(self, payment_address, value_payload, druid):
-        """Build the payload for the valence node's /valence_set endpoint, matching JS SDK's generateValenceSetBody."""
-        return {
-            "address": payment_address,
-            "value": value_payload,
-            "druid": druid
-        }
-
-    def generate_verification_headers(self, payment_address, sender_keypair, payload=None):
-        """
-        Port of JS SDK's generateVerificationHeaders.
-        Signs the canonical JSON of the payload/body.
-        Returns headers: x-signature, x-public-key.
-        """
-        import json
-        import base64
-        import nacl.signing
-
-        if payload is None:
-            payload = {}
-
-        # Canonical JSON
-        payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-        signing_key = nacl.signing.SigningKey(sender_keypair['secret_key'] if isinstance(sender_keypair, dict) else sender_keypair.secret_key)
-        signature = signing_key.sign(payload_bytes).signature
-
-        return {
-            "x-signature": base64.b64encode(signature).decode(),
-            "x-public-key": base64.b64encode(signing_key.verify_key.encode()).decode(),
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-    def construct_tx_ins_address(self, inputs):
-        """
-        Port of JS SDK's constructTxInsAddress.
-        Concatenates all input addresses, comma-separated.
-        """
-        return ",".join(str(inp["address"]) for inp in inputs)
-
-    def get_all_addresses_and_keypair_map(self, all_keypairs):
-        """Get all addresses and a mapping from address to keypair, matching JS SDK's getAllAddressesAndKeypairMap."""
-        addresses = []
-        keypair_map = {}
-        for kp in all_keypairs:
-            addr = kp['address'] if isinstance(kp, dict) else kp.address
-            addresses.append(addr)
-            keypair_map[addr] = kp
-        return addresses, keypair_map
-
-    def fetch_pending_2way_payments(self, all_keypairs, encrypted_tx_list):
-        """
-        Fetch and decrypt pending 2WayPayments from the valence node.
-        Mirrors JS SDK's fetchPending2WayPayments.
-        """
-        import requests
-        import base64
-        import nacl.public
-        import json
-
-        valence_host = self.network_config.get("valenceHost")
-        headers = client_get_headers()
-        response = requests.post(f"{valence_host}/fetch_pending_2way_payments", json={"encryptedTxList": encrypted_tx_list}, headers=headers, timeout=30)
-        handled = client_handle_response(response)
-        if handled.is_err:
-            return IResult.err(handled.error, handled.error_message)
-        result = handled.get_ok()
-        pending = result.get("content", {}).get("pending", {})
-        # Decrypt each pending tx
-        decrypted = {}
-        for druid, tx_info in pending.items():
-            enc = tx_info.get("encryptedTx")
-            nonce = base64.b64decode(enc["nonce"])
-            ciphertext = base64.b64decode(enc["ciphertext"])
-            # Find matching keypair
-            for kp in all_keypairs:
-                try:
-                    private_key = nacl.public.PrivateKey(kp['secret_key'] if isinstance(kp, dict) else kp.secret_key)
-                    # Assume sender's public key is provided in tx_info
-                    sender_pub = nacl.public.PublicKey(base64.b64decode(tx_info["senderPublicKey"]))
-                    box = nacl.public.Box(private_key, sender_pub)
-                    tx_bytes = box.decrypt(ciphertext, nonce)
-                    tx = json.loads(tx_bytes.decode())
-                    decrypted[druid] = tx
-                    break
-                except Exception:
+            for mailbox_address in addresses:
+                if mailbox_address in seen_mailbox:
                     continue
-        return IResult.ok({"pending": decrypted})
+                seen_mailbox.add(mailbox_address)
 
-    def accept_2way_payment(self, druid, pending_dict, all_keypairs):
-        """
-        Accept a pending 2WayPayment: decrypt, merge, sign, and submit the merged transaction.
-        Mirrors JS SDK's accept2WayPayment.
-        """
-        import requests
-        import json
-        # 1. Get the pending half-tx
-        half_tx = pending_dict[druid]
-        # 2. Find our keypair
-        my_address = half_tx['outputs'][0]['address']
-        my_keypair = None
-        for kp in all_keypairs:
-            if (kp['address'] if isinstance(kp, dict) else kp.address) == my_address:
-                my_keypair = kp
-                break
-        if my_keypair is None:
-            return IResult.err(IErrorInternal.InvalidParametersProvided, "No matching keypair for acceptance.")
-        # 3. Construct our own half-tx
-        # (Assume we have the same expectations as the counterparty, swap sender/receiver)
-        sender_expectation = half_tx['druidInfo']['receiverExpectation']
-        receiver_expectation = half_tx['druidInfo']['senderExpectation']
-        balance = self.fetch_balance([my_address]).get_ok()
-        keypair_map = {kp['address'] if isinstance(kp, dict) else kp.address: kp for kp in all_keypairs}
-        my_half = self.create_2w_tx_half(balance, druid, sender_expectation, receiver_expectation, my_address, keypair_map)["createTx"]
-        # 4. Merge both halves (inputs + outputs + druidInfo)
-        merged_tx = {
-            "inputs": half_tx["inputs"] + my_half["inputs"],
-            "outputs": half_tx["outputs"] + my_half["outputs"],
-            "druidInfo": half_tx["druidInfo"],
-            "timestamp": int(time.time() * 1000),
-            "version": 1,
-        }
-        # 5. Sign merged tx with both keypairs
-        merged_tx["signatures"] = self.sign_transaction(merged_tx, my_keypair)
-        # 6. Submit to valence node
-        valence_host = self.network_config.get("valenceHost")
-        headers = client_get_headers()
-        response = requests.post(f"{valence_host}/accept_2way_payment", json={"druid": druid, "mergedTx": merged_tx}, headers=headers, timeout=30)
-        handled = client_handle_response(response)
-        if handled.is_err:
-            return IResult.err(handled.error, handled.error_message)
-        return IResult.ok(handled.get_ok().get("content"))
+                kp = keypair_map[mailbox_address]
 
-    def reject_2way_payment(self, druid, pending_dict, all_keypairs):
+                entries_result = vc.get(mailbox_address, kp)
+                if entries_result.is_err:
+                    errors.append(f"fetch valence mailbox {mailbox_address}: {entries_result.error_message}")
+                    continue
+                entries = entries_result.get_ok() or {}
+
+                for druid, details in entries.items():
+                    half = stored_by_druid.get(druid)
+                    if half is None or (details or {}).get('status') != 'accepted':
+                        # Either an incoming offer (or status update) this
+                        # wallet never initiated, or one of our own offers
+                        # that isn't settled yet - surface both as pending.
+                        pending[druid] = details
+                        continue
+
+                    try:
+                        encrypted_half = half['encryptedHalf'] if isinstance(half, dict) else half.encrypted_half
+                        tx = self._decrypt_2w_half(encrypted_half)
+                    except Exception as e:
+                        errors.append(f"decrypt stored half for druid {druid}: {e}")
+                        continue
+
+                    druid_info = tx.get('druid_info') or {}
+                    expectations = druid_info.get('expectations') or []
+                    if not expectations:
+                        errors.append(f"stored half for druid {druid} has no DRUID expectations")
+                        continue
+
+                    # The counterparty has now filled in senderExpectation.from;
+                    # replace our stored (incomplete) expectation with theirs.
+                    expectations[0] = details.get('senderExpectation')
+
+                    submit_result = self._submit_2w_half(self.network_config.get('mempoolHost'), tx)
+                    if submit_result.is_err:
+                        errors.append(f"submit settled half for druid {druid}: {submit_result.error_message}")
+                        continue
+
+                    delete_result = vc.delete(druid, mailbox_address, kp)
+                    if delete_result.is_err:
+                        # The half is already submitted on-chain even though
+                        # the valence entry couldn't be cleaned up - this is
+                        # committed progress and must still be reported settled.
+                        errors.append(f"delete settled valence entry for druid {druid}: {delete_result.error_message}")
+
+                    settled.append(druid)
+
+            result: Dict[str, Any] = {"pending": pending, "settled": settled}
+            if errors:
+                result["errors"] = errors
+            return IResult.ok(result)
+        except Exception as e:
+            logger.error(f"Error in fetch_pending_2way_payment: {str(e)}")
+            return IResult.err(IErrorInternal.InternalError, str(e))
+
+    def _handle_2w_tx_response(self, details: dict, status: str, all_keypairs: list) -> IResult:
+        """Shared implementation behind `accept_2way_payment` and
+        `reject_2way_payment`: stamps `details` with `status`, and - only
+        when accepting - builds this party's matching transaction half
+        (paying `details["senderExpectation"]`'s asset to its address,
+        embedding `details["receiverExpectation"]` as this party's own
+        `druid_info` expectation - the role-swap relative to
+        `make_2way_payment`) and submits it to `details["mempoolHost"]`,
+        before posting the updated status back to valence (addressed to
+        `details["senderExpectation"]["to"]`'s mailbox, signed by this
+        party's own - `details["receiverExpectation"]["to"]` - keypair).
+        Mirrors sdk-go's `Wallet.handle2WTxResponse` / sdk-php's
+        `Client::handle2WTxResponse`.
         """
-        Reject a pending 2WayPayment by updating its status to 'rejected' on the valence node.
-        Mirrors JS SDK's reject2WayPayment.
+        try:
+            addresses, keypair_map = self._build_keypair_map(all_keypairs)
+
+            receiver_address = details['receiverExpectation']['to']
+            receiver_kp = keypair_map.get(receiver_address)
+            if receiver_kp is None:
+                return IResult.err(
+                    IErrorInternal.InvalidParametersProvided,
+                    f"No keypair for receiver address {receiver_address}",
+                )
+
+            details = dict(details)
+            details['senderExpectation'] = dict(details['senderExpectation'])
+            details['receiverExpectation'] = dict(details['receiverExpectation'])
+            details['status'] = status
+
+            if status == 'accepted':
+                balance_result = self.fetch_balance(addresses)
+                if balance_result.is_err:
+                    return balance_result
+                balance = balance_result.get_ok()
+
+                my_half = tx_create_2w_tx_half(
+                    details['druid'], details['receiverExpectation'], details['senderExpectation'],
+                    balance, keypair_map, receiver_address, 0,
+                )
+                create_tx = my_half['create_tx']
+
+                details['senderExpectation']['from'] = tx_construct_tx_ins_address(create_tx['inputs'])
+
+                submit_result = self._submit_2w_half(details['mempoolHost'], create_tx)
+                if submit_result.is_err:
+                    return submit_result
+
+            post_result = self._valence_client().post(details['senderExpectation']['to'], receiver_kp, details)
+            if post_result.is_err:
+                return post_result
+
+            return IResult.ok(details)
+        except ValueError as e:
+            if str(e) == 'InsufficientFunds':
+                return IResult.err(IErrorInternal.InsufficientFunds, str(e))
+            return IResult.err(IErrorInternal.InvalidParametersProvided, str(e))
+        except Exception as e:
+            logger.error(f"Error in _handle_2w_tx_response: {str(e)}")
+            return IResult.err(IErrorInternal.InternalError, str(e))
+
+    def accept_2way_payment(self, details: dict, all_keypairs: list) -> IResult:
+        """Accept a pending two-way trade offer described by `details`: pays
+        `details["senderExpectation"]`'s asset to the offering party, embeds
+        this party's own `details["receiverExpectation"]` as its half of the
+        DRUID trade, submits the resulting transaction to
+        `details["mempoolHost"]`, and posts the accepted status (with
+        `senderExpectation.from` now filled in) back to valence.
+        `all_keypairs` must include the keypair for
+        `details["receiverExpectation"]["to"]` (this party's own address in
+        the offer). Mirrors sdk-go's `Wallet.Accept2WayPayment` / sdk-php's
+        `Client::accept2WayPayment`.
         """
-        import requests
-        valence_host = self.network_config.get("valenceHost")
-        headers = client_get_headers()
-        response = requests.post(f"{valence_host}/reject_2way_payment", json={"druid": druid}, headers=headers, timeout=30)
-        handled = client_handle_response(response)
-        if handled.is_err:
-            return IResult.err(handled.error, handled.error_message)
-        return IResult.ok(handled.get_ok().get("content"))
+        return self._handle_2w_tx_response(details, 'accepted', all_keypairs)
+
+    def reject_2way_payment(self, details: dict, all_keypairs: list) -> IResult:
+        """Decline a pending two-way trade offer described by `details`: no
+        transaction is built or submitted, but the rejected status is posted
+        back to valence so the offering party's `fetch_pending_2way_payment`
+        can observe it. `all_keypairs` must include the keypair for
+        `details["receiverExpectation"]["to"]` (this party's own address in
+        the offer). Mirrors sdk-go's `Wallet.Reject2WayPayment` / sdk-php's
+        `Client::reject2WayPayment`.
+        """
+        return self._handle_2w_tx_response(details, 'rejected', all_keypairs)
 
 def validate_wallet_config(config: Dict[str, Any], init_offline: bool = False) -> IResult[WalletConfig]:
     """Validate wallet configuration.
