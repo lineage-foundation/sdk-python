@@ -81,6 +81,20 @@ def get_address_version(
         
     return IResult.err(IErrorInternal.InvalidParametersProvided)
 
+def generate_druid() -> str:
+    """Generate a DRUID (DDE receipt unique identifier) for a two-way trade.
+
+    Matches sdk-js/sdk-go's `generateDRUID`: "DRUID0x" followed by the first
+    32 hex characters of `hex(sha3_256(uuid))`, where `uuid` is a random
+    UUIDv4 with its dashes stripped (the DRUID hashes the UUID's *text*, not
+    its raw bytes). This replaces the previous `"DRUID" + uuid4().hex` form,
+    which neither hashed the UUID nor used the `0x`-prefixed shape the
+    canonical protocol expects.
+    """
+    uuid_hex = uuid.uuid4().hex
+    digest = hashlib.sha3_256(get_string_bytes(uuid_hex)).hexdigest()
+    return f"DRUID0x{digest[:32]}"
+
 def generate_seed_phrase() -> str:
     """Generate a new BIP39 seed phrase.
     
