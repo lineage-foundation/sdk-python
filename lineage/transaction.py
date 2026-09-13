@@ -395,6 +395,97 @@ def update_signatures(
     return transaction
 
 
+def construct_tx_ins_address(inputs: List[Dict[str, Any]]) -> str:
+    """Derive the "from" address used to correlate the two halves of a DRUID
+    trade from a transaction's inputs.
+
+    Matches sdk-js's `constructTxInsAddress` / `getFormattedScriptString`
+    byte-for-byte: each input is rendered as its P2PKH script's stack
+    entries ("Bytes:<signable_data>", "Signature:<signature>",
+    "PubKey:<public_key>", "Op:OP_DUP", "Op:<hash op>", "Bytes:<address>",
+    "Op:OP_EQUALVERIFY", "Op:OP_CHECKSIG") joined with "-", prefixed with
+    "<n>-<t_hash>-" (or "null-" when there is no `previous_out`); every
+    input's rendered string is then joined with "-" and the whole preimage
+    is sha3_256-hashed. This is unrelated to `construct_tx_in_out_signable_hash`
+    - it exists purely to give both DRUID counterparties a shared identifier
+    for "the set of inputs this half spent", not to sign anything.
+    """
+    parts = [_construct_tx_in_address_part(tx_in) for tx_in in inputs]
+    joined = '-'.join(parts)
+    return hashlib.sha3_256(get_string_bytes(joined)).hexdigest()
+
+
+def _construct_tx_in_address_part(tx_in: Dict[str, Any]) -> str:
+    pay_2_pkh = tx_in['script_signature']['Pay2PkH']
+    address_version = pay_2_pkh.get('address_version')
+
+    hash_op = 'OP_HASH256'
+    if address_version is not None and address_version != 1:
+        hash_op = 'OP_HASH256_TEMP'
+
+    public_key_bytes = bytes.fromhex(pay_2_pkh['public_key'])
+    address = construct_address(public_key_bytes)
+
+    script = '-'.join([
+        f"Bytes:{pay_2_pkh['signable_data']}",
+        f"Signature:{pay_2_pkh['signature']}",
+        f"PubKey:{pay_2_pkh['public_key']}",
+        'Op:OP_DUP',
+        f'Op:{hash_op}',
+        f'Bytes:{address}',
+        'Op:OP_EQUALVERIFY',
+        'Op:OP_CHECKSIG',
+    ])
+
+    previous_out = tx_in.get('previous_out')
+    if previous_out is None:
+        return f"null-{script}"
+    return f"{previous_out['n']}-{previous_out['t_hash']}-{script}"
+
+
+def create_2w_tx_half(
+    druid: str,
+    this_expectation: Dict[str, Any],
+    counter_expectation: Dict[str, Any],
+    balance: Dict[str, Any],
+    keypairs: Dict[str, IKeypair],
+    excess_address: str,
+    locktime: int,
+) -> Dict[str, Any]:
+    """Build one half of a two-way (DRUID) trade.
+
+    A 2-way half is an ORDINARY P2PKH transaction: it pays
+    `counter_expectation['asset']` to `counter_expectation['to']` (plus any
+    excess back to `excess_address`), carrying `this_expectation` as this
+    party's half of the DRUID trade metadata. Matches sdk-js/sdk-go's
+    `create2WTxHalf` byte-for-byte: input selection and output/signature
+    construction are exactly `create_payment_tx`'s (driven by
+    `counter_expectation`'s asset/to), and `druid_info` is attached as
+    `{"druid": druid, "participants": 2, "expectations": [this_expectation]}`
+    - UNSIGNED, and never folded into any signable preimage. Each input is
+    signed exactly as in the 1-way path, over
+    `construct_tx_in_out_signable_hash(previous_out, outputs)`.
+
+    Construction deliberately omits `genesis_hash`/`version` from
+    `druid_info` - those are added only at submission time.
+    """
+    druid_info = {
+        'druid': druid,
+        'participants': 2,
+        'expectations': [this_expectation],
+    }
+    tx_ins = get_inputs_for_tx(counter_expectation['asset'], balance, keypairs)
+    transaction = create_tx(
+        counter_expectation['to'],
+        counter_expectation['asset'],
+        excess_address,
+        druid_info,
+        tx_ins,
+        locktime,
+    )
+    return update_signatures(transaction, balance, keypairs)
+
+
 def create_payment_tx(
     payment_address: str,
     payment_asset: Dict[str, Any],

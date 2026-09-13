@@ -107,6 +107,86 @@ if payment_result.is_ok:
     print(payment_result.get_ok())
 ```
 
+### Two-way (DRUID) payments
+
+DRUID-based dual double-entry trades: two parties each pay an asset to the
+other, atomically correlated by a shared DRUID, and coordinated out-of-band
+through a plaintext valence mailbox host (`valenceHost`, see Configuration
+below).
+
+```python
+# Party A offers to pay sending_asset to payment_address in exchange for
+# receiving_asset delivered to receive_keypair's address. Persist the
+# returned pending half until fetch_pending_2way_payment reports it settled.
+result = wallet_a.make_2way_payment(
+    payment_address,   # B's address
+    sending_asset,      # e.g. {'Item': {'amount': 50, 'genesis_hash': genesis_hash, 'metadata': None}}
+    receiving_asset,    # e.g. {'Token': 100}
+    all_keypairs,        # A's keypairs that fund sending_asset
+    receive_keypair,      # A's keypair that should receive receiving_asset
+)
+pending_half = result.get_ok()
+
+# Both parties poll their own mailboxes: incoming offers are surfaced under
+# 'pending'; offers this wallet made that the counterparty has accepted are
+# submitted and reported under 'settled'.
+result = wallet_b.fetch_pending_2way_payment(stored_pending_halves, all_keypairs)
+pending, settled = result.get_ok()['pending'], result.get_ok()['settled']
+
+# Party B accepts (submits its half and notifies valence) or rejects
+# (notifies valence only) an offer found in `pending`.
+wallet_b.accept_2way_payment(details, all_keypairs)
+wallet_b.reject_2way_payment(details, all_keypairs)
+```
+
+`make_2way_payment` is stateless on this side: it builds and encrypts this
+party's transaction half, posts the plaintext offer to valence, and hands the
+pending half back to the caller - it does not keep it anywhere itself. The
+caller must persist that return value (e.g. to disk, a database) and pass it
+back in as one of `stored_pending_halves` on a later
+`fetch_pending_2way_payment` call, which is what actually submits and settles
+it once the counterparty has accepted.
+
+Because the plaintext valence protocol, the DRUID expectation shapes, and the
+transaction halves are all wire-identical across SDKs, a trade offered by
+this SDK's `make_2way_payment` can be discovered and accepted by
+[`sdk-js`](https://github.com/lineage-foundation/sdk-js)'s,
+[`sdk-go`](https://github.com/lineage-foundation/sdk-go)'s, or
+[`sdk-php`](https://github.com/lineage-foundation/sdk-php)'s
+`fetchPending2WayPayment`/`accept2WayPayment` (and vice versa) - neither side
+needs to know which SDK the other party is running.
+
+**BREAKING CHANGE:** this replaces the previous sdk-python 2-way
+implementation entirely, and the two are not interoperable. The old scheme
+NaCl-`Box`-encrypted each offer and posted it to a `/valence_set` endpoint
+(with matching `/fetch_pending_2way_payment(s)`, `/accept_2way_payment`,
+`/reject_2way_payment` routes) that no other SDK ever implemented. It has
+been removed and replaced by the canonical plaintext `/messages` mailbox
+transport (`lineage/valence.py`) that sdk-go and sdk-php also speak, where
+every request authenticates by signing the raw mailbox address string with
+the caller's own keypair. Any offer created with the old sdk-python 2-way
+code cannot be read or settled by this version - there is no migration path
+for in-flight offers, only for new trades made after upgrading.
+
+### Live end-to-end script
+
+`scripts/e2e_2way.py` drives a full two-wallet 2-way (DRUID) swap against the
+live production hosts (`mempool.lineage.to` / `storage.lineage.to` /
+`valence.lineage.to`): wallet A mints an item and offers it in exchange for
+tokens from wallet B, B accepts, A settles, and both final balances are
+polled to confirm the swap landed atomically.
+
+```bash
+python scripts/e2e_2way.py                        # local wallet/keypair setup only
+LINEAGE_E2E_WRITE=1 python scripts/e2e_2way.py     # + miner funding and the live swap
+```
+
+Wallet/keypair creation is a local operation and always runs;
+`LINEAGE_E2E_WRITE=1` additionally funds both wallets from the miner faucet
+and drives `make_2way_payment`/`fetch_pending_2way_payment`/
+`accept_2way_payment` against the live network. This live e2e is
+intentionally kept out of the default test run (see Development below).
+
 ## Features
 
 ### Blockchain Client
@@ -130,9 +210,12 @@ All of the above talk to the `/v1` REST API on the mempool/storage hosts.
 Reads and writes go through `lineage/blockchain.py`'s shared transport,
 which maps `application/problem+json` error bodies onto the SDK's
 `IResult` error types. The 2-way payment flow (`make_2way_payment`,
-`fetch_pending_2way_payments`, `accept_2way_payment`, `reject_2way_payment`)
-is unrelated to `/v1` - it talks to the valence node directly and its
-wire format hasn't changed.
+`fetch_pending_2way_payment`, `accept_2way_payment`, `reject_2way_payment`)
+is unrelated to `/v1` for its offer/accept/reject transport - it talks to the
+valence node's plaintext `/messages` mailbox directly - though the settled
+transaction half is still submitted through `/v1/transactions` like any other
+payment. See "Two-way (DRUID) payments" above: this transport is a breaking
+change from the previous sdk-python 2-way implementation.
 
 `create_transactions` now does real work: it fetches the current balance
 for the spending addresses, selects UTXOs, builds and signs a
