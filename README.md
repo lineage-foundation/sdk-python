@@ -4,11 +4,13 @@ Python SDK for the Lineage `/v1` REST API: a keyless read client and a key-holdi
 
 ## Installation
 
+Published on [PyPI](https://pypi.org/project/lineage-sdk/) as `lineage-sdk`.
+
 ```bash
 pip install lineage-sdk
 ```
 
-The distribution is published as `lineage-sdk`; the import name is `lineage`:
+The distribution is `lineage-sdk`; the import name is `lineage`:
 
 ```python
 import lineage
