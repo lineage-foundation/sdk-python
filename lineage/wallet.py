@@ -14,6 +14,7 @@ import uuid
 import random
 import logging
 from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor
 
 from lineage.interfaces import (
     IErrorInternal, IResult, IMasterKey,
@@ -87,6 +88,10 @@ class Wallet:
     passphrase_key: Optional[bytes] = None
     seed_phrase: Optional[str] = None
     routes_initialized: bool = False
+    # Per-instance cache of resolved item genesis facts, keyed by
+    # genesis_hash. Metadata is immutable on-chain, so entries never expire;
+    # only successful resolves are cached, leaving failures retryable.
+    _item_info_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
 
     def init_new(self, config: Dict[str, str]) -> IResult[None]:
         """Initialize a new wallet instance.
@@ -247,12 +252,16 @@ class Wallet:
             logger.error(f"Error initializing network: {str(e)}")
             return IResult.err(IErrorInternal.UnableToInitializeNetwork)
 
-    def fetch_balance(self, address_list: List[str]) -> IResult[Dict[str, Any]]:
+    def fetch_balance(self, address_list: List[str], enrich: bool = True) -> IResult[Dict[str, Any]]:
         """Fetch balance for a list of addresses.
-        
+
         Args:
             address_list: List of addresses to fetch balances for
-            
+            enrich: When True (default), attach each item's genesis
+                `metadata` to the returned item UTXOs, resolved from the
+                storage node (best-effort). Pass False to skip enrichment
+                and issue zero resolver calls.
+
         Returns:
             IResult[Dict[str, Any]]: Balance information or error details
         """
@@ -281,14 +290,129 @@ class Wallet:
             if result.is_err:
                 return IResult.err(result.error, result.error_message)
             api_response = result.get_ok()
-            return IResult.ok(api_response.get('balance'))
-            
+            balance = api_response.get('balance')
+            if enrich and isinstance(balance, dict):
+                self._enrich_balance_items(balance)
+            return IResult.ok(balance)
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Network error fetching balance: {str(e)}")
             return IResult.err("Network error while fetching balance")
         except Exception as e:
             logger.error(f"Error fetching balance: {str(e)}")
             return IResult.err("Failed to fetch balance")
+
+    def get_item_info(self, genesis_hash: str) -> IResult[Dict[str, Any]]:
+        """Resolve an item's full genesis facts by its `genesis_hash`.
+
+        Items keep only a `genesis_hash` after transfer - their metadata is
+        dropped on-spend - so this reads the immutable genesis facts
+        (metadata, total supply, creation block/tx, creator) from the
+        storage node's `GET /v1/items/{genesis_hash}` endpoint. Results are
+        held in a per-instance cache shared with `fetch_balance` enrichment;
+        only successful resolves are cached, so a miss stays retryable.
+
+        Args:
+            genesis_hash: The item's genesis hash to resolve.
+
+        Returns:
+            IResult[Dict[str, Any]]: The genesis-facts object on success, a
+            `NotFound` error for an unknown item, a `StorageNotInitialized`
+            error when no storage host is configured, or a network/server
+            error otherwise.
+        """
+        try:
+            if not genesis_hash or not isinstance(genesis_hash, str):
+                return IResult.err(
+                    IErrorInternal.InvalidParametersProvided,
+                    "genesis_hash must be a non-empty string",
+                )
+
+            cached = self._item_info_cache.get(genesis_hash)
+            if cached is not None:
+                return IResult.ok(cached)
+
+            storage_host = self.network_config.get('storageHost') if self.network_config else None
+            if not storage_host:
+                return IResult.err(
+                    IErrorInternal.StorageNotInitialized,
+                    "Storage host is required to resolve item info",
+                )
+
+            headers = client_get_headers(self.network_config.get('apiKey'))
+            try:
+                response = requests.get(
+                    f"{storage_host}/v1/items/{genesis_hash}",
+                    headers=headers,
+                    timeout=30,
+                )
+            except requests.exceptions.RequestException as e:
+                logger.error("Network error resolving item info: %s", str(e))
+                return IResult.err(IErrorInternal.NetworkError, str(e))
+
+            handled = client_handle_response(response)
+            if handled.is_err:
+                return IResult.err(handled.error, handled.error_message)
+
+            info = handled.get_ok()
+            self._item_info_cache[genesis_hash] = info
+            return IResult.ok(info)
+
+        except Exception as e:
+            logger.error("Error resolving item info: %s", str(e))
+            return IResult.err(IErrorInternal.InternalError, str(e))
+
+    def _fetch_item_info(self, genesis_hash: str) -> Optional[Dict[str, Any]]:
+        """Resolve one item's genesis facts for best-effort enrichment.
+
+        Thin wrapper over `get_item_info` that collapses every miss or
+        failure to `None` (and, via `get_item_info`, caches only successes).
+        Used by `fetch_balance` so a single hash is resolved at most once.
+        """
+        result = self.get_item_info(genesis_hash)
+        return result.get_ok() if result.is_ok else None
+
+    def _enrich_balance_items(self, balance: Dict[str, Any]) -> None:
+        """Attach each item's genesis `metadata` to every item UTXO in a
+        balance, in place and best-effort.
+
+        Collects the distinct `genesis_hash`es across all addresses,
+        resolves the cache-misses from the storage node in parallel, then
+        writes the resolved metadata onto each matching item. A resolver
+        error, 404, or missing metadata leaves an item's existing metadata
+        untouched (a miss never clobbers inline metadata); metadata is
+        written only on a successful resolve. This method never raises - a
+        failure here must not fail the balance listing.
+        """
+        try:
+            address_list = balance.get('address_list') or {}
+            utxos: List[Dict[str, Any]] = []
+            for outputs in address_list.values():
+                utxos.extend(outputs or [])
+
+            hashes = set()
+            for utxo in utxos:
+                item = (utxo.get('value') or {}).get('Item')
+                if isinstance(item, dict) and item.get('genesis_hash'):
+                    hashes.add(item['genesis_hash'])
+
+            misses = [h for h in hashes if h not in self._item_info_cache]
+            if misses:
+                # requests is blocking I/O, so a thread pool gives real
+                # parallelism here (the GIL is released across the socket
+                # wait). Each thread resolves a distinct hash and writes its
+                # own cache key, so no shared-key contention.
+                with ThreadPoolExecutor(max_workers=min(len(misses), 8)) as executor:
+                    list(executor.map(self._fetch_item_info, misses))
+
+            for utxo in utxos:
+                item = (utxo.get('value') or {}).get('Item')
+                if isinstance(item, dict) and item.get('genesis_hash'):
+                    info = self._item_info_cache.get(item['genesis_hash'])
+                    if info is not None:
+                        item['metadata'] = info.get('metadata')
+        except Exception as e:
+            logger.error("Error enriching balance items: %s", str(e))
 
     def get_debug_data(self, host: str) -> IResult[Dict[str, Any]]:
         """Get debug data from a host.
@@ -670,7 +794,7 @@ class Wallet:
             keypair_map = {keypair.address: keypair for keypair in all_keypairs}
 
             # Get current balance for the spending addresses
-            balance_result = self.fetch_balance(all_addresses)
+            balance_result = self.fetch_balance(all_addresses, enrich=False)
             if balance_result.is_err:
                 return IResult.err(balance_result.error, balance_result.error_message)
             balance = balance_result.get_ok()
@@ -1024,7 +1148,7 @@ class Wallet:
             receive_kp = self._to_ikeypair(receive_keypair)
             addresses, keypair_map = self._build_keypair_map(all_keypairs)
 
-            balance_result = self.fetch_balance(addresses)
+            balance_result = self.fetch_balance(addresses, enrich=False)
             if balance_result.is_err:
                 return balance_result
             balance = balance_result.get_ok()
@@ -1208,7 +1332,7 @@ class Wallet:
             details['status'] = status
 
             if status == 'accepted':
-                balance_result = self.fetch_balance(addresses)
+                balance_result = self.fetch_balance(addresses, enrich=False)
                 if balance_result.is_err:
                     return balance_result
                 balance = balance_result.get_ok()
