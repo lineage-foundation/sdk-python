@@ -67,6 +67,30 @@ if payment.is_ok:
     print(payment.get_ok()['transaction_hash'])
 ```
 
+### Item metadata enrichment
+
+`fetch_balance` attaches each item's genesis `metadata` to the returned item
+UTXOs by default, resolved from the configured storage node
+(`GET /v1/items/{genesis_hash}`). Distinct genesis hashes are resolved once,
+in parallel, and cached per wallet instance (metadata is immutable on-chain).
+
+Enrichment is best-effort: if the storage node is unreachable or an item is
+unknown, that item is returned with `metadata` unchanged and the balance call
+still succeeds. Pass `enrich=False` to skip it entirely:
+
+```python
+balance = wallet.fetch_balance([address], enrich=False)
+```
+
+For an item's full genesis facts (metadata, total supply, creation
+block/tx, creator address), resolve it directly:
+
+```python
+result = wallet.get_item_info(genesis_hash)
+if result.is_ok:
+    facts = result.get_ok()  # {"genesis_hash", "metadata", "total_amount", "created", "creator_address"}
+```
+
 ## Two-way (DRUID) payments
 
 DRUID-based dual double-entry trades: two parties each pay an asset to the

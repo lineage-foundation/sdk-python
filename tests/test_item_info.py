@@ -72,3 +72,121 @@ def test_get_item_info_rejects_empty_hash(wallet: Wallet):
     res = wallet.get_item_info("")
     assert res.is_err
     assert res.error == IErrorInternal.InvalidParametersProvided
+
+
+def _balance_with(genesis_hash, metadata=None, second_address=False):
+    """Build a balances/query response holding item UTXO(s)."""
+    address_list = {
+        "addr1": [
+            {
+                "out_point": {"t_hash": "t0", "n": 0},
+                "value": {"Item": {"amount": 5, "genesis_hash": genesis_hash, "metadata": metadata}},
+            },
+        ],
+    }
+    if second_address:
+        address_list["addr2"] = [
+            {
+                "out_point": {"t_hash": "t1", "n": 0},
+                "value": {"Item": {"amount": 3, "genesis_hash": genesis_hash, "metadata": None}},
+            },
+        ]
+    return {"total": {"tokens": 0, "items": {genesis_hash: 5}}, "address_list": address_list}
+
+
+def _item(balance, address, index=0):
+    return balance["address_list"][address][index]["value"]["Item"]
+
+
+def test_fetch_balance_enriches_item_metadata_by_default(wallet: Wallet, mock_api):
+    """A transferred item (metadata=None) is enriched from the resolver."""
+    mock_api.post(
+        "https://mempool.lineage.to/v1/balances/query",
+        json={"balance": _balance_with(GH, metadata=None)},
+    )
+    item_mock = mock_api.get(f"{STORAGE_HOST}/v1/items/{GH}", json=INFO)
+
+    result = wallet.fetch_balance(["addr1"])
+    assert result.is_ok
+    assert item_mock.call_count == 1
+    balance = result.get_ok()
+    assert _item(balance, "addr1")["metadata"] == "ticket #1"
+
+
+def test_fetch_balance_dedups_distinct_hashes(wallet: Wallet, mock_api):
+    """Two addresses sharing one genesis_hash trigger exactly one resolver call."""
+    mock_api.post(
+        "https://mempool.lineage.to/v1/balances/query",
+        json={"balance": _balance_with(GH, metadata=None, second_address=True)},
+    )
+    item_mock = mock_api.get(f"{STORAGE_HOST}/v1/items/{GH}", json=INFO)
+
+    result = wallet.fetch_balance(["addr1", "addr2"])
+    assert result.is_ok
+    assert item_mock.call_count == 1  # deduped, not one-per-utxo
+    balance = result.get_ok()
+    assert _item(balance, "addr1")["metadata"] == "ticket #1"
+    assert _item(balance, "addr2")["metadata"] == "ticket #1"
+
+
+def test_repeat_listing_uses_cache_no_further_calls(wallet: Wallet, mock_api):
+    """A second fetch_balance for the same hash issues no further resolver call."""
+    mock_api.post(
+        "https://mempool.lineage.to/v1/balances/query",
+        json={"balance": _balance_with(GH, metadata=None)},
+    )
+    item_mock = mock_api.get(f"{STORAGE_HOST}/v1/items/{GH}", json=INFO)
+
+    first = wallet.fetch_balance(["addr1"])
+    second = wallet.fetch_balance(["addr1"])
+    assert first.is_ok and second.is_ok
+    assert item_mock.call_count == 1  # cached across listings
+    assert _item(second.get_ok(), "addr1")["metadata"] == "ticket #1"
+
+
+def test_fetch_balance_graceful_degrade_on_resolver_error(wallet: Wallet, mock_api):
+    """A resolver error leaves metadata None; the balance call still succeeds."""
+    mock_api.post(
+        "https://mempool.lineage.to/v1/balances/query",
+        json={"balance": _balance_with(GH, metadata=None)},
+    )
+    mock_api.get(
+        f"{STORAGE_HOST}/v1/items/{GH}",
+        status_code=500,
+        json={"type": "about:blank", "title": "Internal Server Error", "status": 500, "detail": "boom"},
+    )
+
+    result = wallet.fetch_balance(["addr1"])
+    assert result.is_ok
+    assert _item(result.get_ok(), "addr1")["metadata"] is None
+
+
+def test_resolve_miss_does_not_clobber_inline_metadata(wallet: Wallet, mock_api):
+    """An item carrying inline metadata keeps it when the resolver fails (miss != overwrite)."""
+    mock_api.post(
+        "https://mempool.lineage.to/v1/balances/query",
+        json={"balance": _balance_with(GH, metadata="inline-metadata")},
+    )
+    mock_api.get(
+        f"{STORAGE_HOST}/v1/items/{GH}",
+        status_code=500,
+        json={"type": "about:blank", "title": "Internal Server Error", "status": 500, "detail": "boom"},
+    )
+
+    result = wallet.fetch_balance(["addr1"])
+    assert result.is_ok
+    assert _item(result.get_ok(), "addr1")["metadata"] == "inline-metadata"
+
+
+def test_fetch_balance_enrich_false_issues_no_resolver_calls(wallet: Wallet, mock_api):
+    """enrich=False resolves nothing and leaves items untouched (opt-out gate)."""
+    mock_api.post(
+        "https://mempool.lineage.to/v1/balances/query",
+        json={"balance": _balance_with(GH, metadata=None)},
+    )
+    item_mock = mock_api.get(f"{STORAGE_HOST}/v1/items/{GH}", json=INFO)
+
+    result = wallet.fetch_balance(["addr1"], enrich=False)
+    assert result.is_ok
+    assert item_mock.call_count == 0  # the interceptor must NOT be consumed
+    assert _item(result.get_ok(), "addr1")["metadata"] is None
