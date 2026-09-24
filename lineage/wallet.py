@@ -14,6 +14,7 @@ import uuid
 import random
 import logging
 from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor
 
 from lineage.interfaces import (
     IErrorInternal, IResult, IMasterKey,
@@ -87,6 +88,10 @@ class Wallet:
     passphrase_key: Optional[bytes] = None
     seed_phrase: Optional[str] = None
     routes_initialized: bool = False
+    # Per-instance cache of resolved item genesis facts, keyed by
+    # genesis_hash. Metadata is immutable on-chain, so entries never expire;
+    # only successful resolves are cached, leaving failures retryable.
+    _item_info_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
 
     def init_new(self, config: Dict[str, str]) -> IResult[None]:
         """Initialize a new wallet instance.
@@ -289,6 +294,76 @@ class Wallet:
         except Exception as e:
             logger.error(f"Error fetching balance: {str(e)}")
             return IResult.err("Failed to fetch balance")
+
+    def get_item_info(self, genesis_hash: str) -> IResult[Dict[str, Any]]:
+        """Resolve an item's full genesis facts by its `genesis_hash`.
+
+        Items keep only a `genesis_hash` after transfer - their metadata is
+        dropped on-spend - so this reads the immutable genesis facts
+        (metadata, total supply, creation block/tx, creator) from the
+        storage node's `GET /v1/items/{genesis_hash}` endpoint. Results are
+        held in a per-instance cache shared with `fetch_balance` enrichment;
+        only successful resolves are cached, so a miss stays retryable.
+
+        Args:
+            genesis_hash: The item's genesis hash to resolve.
+
+        Returns:
+            IResult[Dict[str, Any]]: The genesis-facts object on success, a
+            `NotFound` error for an unknown item, a `StorageNotInitialized`
+            error when no storage host is configured, or a network/server
+            error otherwise.
+        """
+        try:
+            if not genesis_hash or not isinstance(genesis_hash, str):
+                return IResult.err(
+                    IErrorInternal.InvalidParametersProvided,
+                    "genesis_hash must be a non-empty string",
+                )
+
+            cached = self._item_info_cache.get(genesis_hash)
+            if cached is not None:
+                return IResult.ok(cached)
+
+            storage_host = self.network_config.get('storageHost') if self.network_config else None
+            if not storage_host:
+                return IResult.err(
+                    IErrorInternal.StorageNotInitialized,
+                    "Storage host is required to resolve item info",
+                )
+
+            headers = client_get_headers(self.network_config.get('apiKey'))
+            try:
+                response = requests.get(
+                    f"{storage_host}/v1/items/{genesis_hash}",
+                    headers=headers,
+                    timeout=30,
+                )
+            except requests.exceptions.RequestException as e:
+                logger.error("Network error resolving item info: %s", str(e))
+                return IResult.err(IErrorInternal.NetworkError, str(e))
+
+            handled = client_handle_response(response)
+            if handled.is_err:
+                return IResult.err(handled.error, handled.error_message)
+
+            info = handled.get_ok()
+            self._item_info_cache[genesis_hash] = info
+            return IResult.ok(info)
+
+        except Exception as e:
+            logger.error("Error resolving item info: %s", str(e))
+            return IResult.err(IErrorInternal.InternalError, str(e))
+
+    def _fetch_item_info(self, genesis_hash: str) -> Optional[Dict[str, Any]]:
+        """Resolve one item's genesis facts for best-effort enrichment.
+
+        Thin wrapper over `get_item_info` that collapses every miss or
+        failure to `None` (and, via `get_item_info`, caches only successes).
+        Used by `fetch_balance` so a single hash is resolved at most once.
+        """
+        result = self.get_item_info(genesis_hash)
+        return result.get_ok() if result.is_ok else None
 
     def get_debug_data(self, host: str) -> IResult[Dict[str, Any]]:
         """Get debug data from a host.
